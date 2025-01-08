@@ -1,65 +1,50 @@
-# Docs for the Azure Web Apps Deploy action: https://github.com/Azure/webapps-deploy
-# More GitHub Actions for Azure: https://github.com/Azure/actions
-
-name: Build and deploy ASP.Net Core app to Azure Web App - conquest-of-lords
-
+name: Build and deploy Blazor app to Azure Web App - conquest-of-lords
 on:
   push:
     branches:
       - master
   workflow_dispatch:
 
+env:
+  DOTNET_VERSION: '8.0.x'
+  PROJECT_PATH: '.' # Modify this to your project path if not in root
+
 jobs:
-  build:
+  build-and-deploy:
     runs-on: windows-latest
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up .NET Core
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '8.x'
-
-      - name: Build with dotnet
-        run: dotnet build --configuration Release
-
-      - name: dotnet publish
-        run: dotnet publish -c Release -o "${{env.DOTNET_ROOT}}/myapp"
-
-      - name: Upload artifact for deployment job
-        uses: actions/upload-artifact@v4
-        with:
-          name: .net-app
-          path: ${{env.DOTNET_ROOT}}/myapp
-
-  deploy:
-    runs-on: windows-latest
-    needs: build
-    environment:
-      name: 'Production'
-      url: ${{ steps.deploy-to-webapp.outputs.webapp-url }}
     permissions:
-      id-token: write #This is required for requesting the JWT
+      id-token: write  # Required for requesting the JWT
+      contents: read   # Required for actions/checkout
 
     steps:
-      - name: Download artifact from build job
-        uses: actions/download-artifact@v4
+      - name: 'Checkout GitHub Action'
+        uses: actions/checkout@v4
         with:
-          name: .net-app
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup DotNet ${{ env.DOTNET_VERSION }} Environment
+        uses: actions/setup-dotnet@v1
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: 'Resolve Project Dependencies and Build'
+        shell: pwsh
+        run: |
+          pushd './${{ env.PROJECT_PATH }}'
+          dotnet build --configuration Release --output ./output
+          popd
       
       - name: Login to Azure
         uses: azure/login@v2
         with:
-          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_197BE4A336BB48708AC4405CA4C00043 }}
-          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_B2E78C56D50D489AA9C634D50C79B350 }}
-          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_72048FB9647B4EA4B65900CD671919A5 }}
+          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_4D4994106EBB4699B0CEF7C1776613E2 }}
+          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_9A0DAB0D289A4093B53685E7C6070C5C }}
+          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_9188986FDA594EADAC6565F4C0A8F7A6 }}
 
-      - name: Deploy to Azure Web App
-        id: deploy-to-webapp
+      - name: 'Deploy to Azure Web App'
         uses: azure/webapps-deploy@v3
+        id: deploy
         with:
           app-name: 'conquest-of-lords'
           slot-name: 'Production'
-          package: .
-          
+          package: '${{ env.PROJECT_PATH }}/output'
