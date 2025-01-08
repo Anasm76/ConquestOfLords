@@ -242,10 +242,18 @@ else
 
     private async Task GenerateTeams()
     {
-        var activePlayers = players.Where(p => p.IsParticipating && p.TroopCapacity >= 10000).ToList();
-        var assignments = GenerateAssignments(activePlayers);
-        generatedAssignments = FormatAssignments(assignments);
-        StateHasChanged();
+        try
+        {
+            var activePlayers = players.Where(p => p.IsParticipating).ToList();
+            var assignments = GenerateAssignments(activePlayers);
+            generatedAssignments = AssignmentFormatter.FormatAssignments(assignments);
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            generatedAssignments = $"Error generating teams: {ex.Message}\n\nStack trace:\n{ex.StackTrace}";
+            StateHasChanged();
+        }
     }
     private async Task SaveAssignments()
     {
@@ -282,222 +290,303 @@ else
         }
     }
 
-    private class BuildingAssignment
+    // Make these classes public so they can be accessed by AssignmentFormatter
+    public class BuildingAssignment
     {
-        public string BuildingName { get; set; } = "";
-        public Player Captain { get; set; } = null!;
-        public List<RallyMember> Members { get; set; } = new();
-        public int TotalCapacity { get; set; }
+        public string Name { get; set; } = "";
+        public bool IsHall => Name == "Hall";
+        public Dictionary<int, RallyTeam> Shifts { get; set; } = new();
+    }
+
+    public class RallyTeam
+    {
+        public Player? Captain { get; set; }
+        public TroopType TroopType => Captain?.TroopType ?? TroopType.Infantry;
+        public int RallyCapacity => Captain?.RallySize ?? 0;
         public int UsedCapacity { get; set; }
-        public int AvailableCapacity => TotalCapacity - UsedCapacity;
+        public List<(Player Player, int Troops)> Members { get; set; } = new();
     }
 
-    private class RallyMember
+    private class TroopPool
     {
-        public Player Player { get; set; } = null!;
-        public int AssignedTroops { get; set; }
+        public TroopType Type { get; set; }
+        public int TotalCapacity { get; set; }
+        public int AvailableCapacity { get; set; }
+        public List<Player> AvailablePlayers { get; set; } = new();
     }
 
-    private List<BuildingAssignment> GenerateAssignments(List<Player> availablePlayers)
+    private List<BuildingAssignment> GenerateAssignments(List<Player> allPlayers)
     {
+        var troopPools = InitializeTroopPools(allPlayers);
         var assignments = new List<BuildingAssignment>();
-        var unassignedPlayers = new List<Player>(availablePlayers);
-        var buildings = new[] { "Hall", "North Spire", "South Spire", "East Spire", "West Spire" };
-        var troopTypes = Enum.GetValues<TroopType>().ToList();
-        var currentTroopTypeIndex = 0;
+        var usedPlayers = new HashSet<int>();
+        var usedCaptainsByShift = new Dictionary<int, HashSet<int>>
+    {
+        { 1, new HashSet<int>() },
+        { 2, new HashSet<int>() }
+    };
 
-        // First, assign all captains
-        var remainingBuildings = new List<string>(buildings);
-        var buildingAssignments = new Dictionary<string, Player>();
+        var buildings = new[] { "Hall", "North Spire", "South Spire", "East Spire", "West Spire" }
+            .Select(name => new BuildingAssignment { Name = name })
+            .ToList();
 
-        // Assign Hall captain first (highest level regardless of type)
-        var hallCaptain = unassignedPlayers
+        // First, get all potential captains sorted by den level and rally size
+        var potentialCaptainsByType = allPlayers
             .Where(p => p.IsWillingToCaptain)
+            .GroupBy(p => p.TroopType)
+            .ToDictionary(
+                g => g.Key,
+                g => g.OrderByDescending(p => p.MaxDenLevel)
+                     .ThenByDescending(p => p.RallySize)
+                     .ToList()
+            );
+
+        // Assign captains for each shift
+        foreach (int shift in new[] { 1, 2 })
+        {
+            var buildingsNeedingCaptains = buildings.ToList();
+
+            while (buildingsNeedingCaptains.Any())
+            {
+                // Get available captains for each troop type
+                var availableCaptains = troopPools
+                    .Select(pool => new
+                    {
+                        TroopType = pool.Key,
+                        Captains = potentialCaptainsByType.GetValueOrDefault(pool.Key, new List<Player>())
+                            .Where(p =>
+                                !usedCaptainsByShift[shift].Contains(p.Id) &&
+                                !usedPlayers.Contains(p.Id) &&
+                                (p.PreferredShift == shift || p.PreferredShift == 3 || p.PreferredShift == 4))
+                            .ToList()
+                    })
+                    .Where(x => x.Captains.Any())
+                    .OrderByDescending(x => x.Captains.First().MaxDenLevel)
+                    .ThenByDescending(x => x.Captains.First().RallySize)
+                    .ToList();
+
+                if (!availableCaptains.Any())
+                {
+                    throw new Exception($"No available captains for shift {shift}");
+                }
+
+                var bestCaptain = availableCaptains.First().Captains.First();
+                var building = buildingsNeedingCaptains.First();
+
+                building.Shifts[shift] = new RallyTeam { Captain = bestCaptain };
+                buildingsNeedingCaptains.RemoveAt(0);
+
+                // Update tracking
+                usedCaptainsByShift[shift].Add(bestCaptain.Id);
+                if (bestCaptain.PreferredShift != 3 && bestCaptain.PreferredShift != 4)
+                {
+                    usedPlayers.Add(bestCaptain.Id);
+                }
+                troopPools[bestCaptain.TroopType].AvailableCapacity -= bestCaptain.RallySize;
+            }
+        }
+
+        // Assign troops to buildings
+        AssignTroopsToBuildings(buildings, troopPools, usedPlayers);
+
+        return buildings;
+    }
+
+    private Dictionary<TroopType, TroopPool> InitializeTroopPools(List<Player> players)
+    {
+        var pools = new Dictionary<TroopType, TroopPool>();
+
+        foreach (TroopType type in Enum.GetValues(typeof(TroopType)))
+        {
+            var typePlayers = players.Where(p => p.TroopType == type && p.IsParticipating).ToList();
+            pools[type] = new TroopPool
+                {
+                    Type = type,
+                    TotalCapacity = typePlayers.Sum(p => p.TroopCapacity),
+                    AvailableCapacity = typePlayers.Sum(p => p.TroopCapacity),
+                    AvailablePlayers = typePlayers
+                };
+        }
+
+        return pools;
+    }
+
+    private Player? FindBestCaptain(List<Player> availablePlayers, HashSet<int> usedPlayers, int shift)
+    {
+        // Get all potential captains before filtering
+        var willingCaptains = availablePlayers
+            .Where(p => p.IsWillingToCaptain)
+            .ToList();
+
+        // Get captains not already used
+        var unusedCaptains = willingCaptains
+            .Where(p => !usedPlayers.Contains(p.Id))
+            .ToList();
+
+        // Get captains available for this shift
+        var shiftAvailableCaptains = unusedCaptains
+            .Where(p => p.PreferredShift == shift ||
+                        p.PreferredShift == 3 || // both shifts
+                        p.PreferredShift == 4)   // any shift
+            .ToList();
+
+        // If we have no captains available for this specific shift but have unused captains,
+        // consider all unused captains (emergency fallback)
+        if (!shiftAvailableCaptains.Any() && unusedCaptains.Any())
+        {
+            shiftAvailableCaptains = unusedCaptains;
+        }
+
+        // Sort by priority
+        var bestCaptain = shiftAvailableCaptains
             .OrderByDescending(p => p.MaxDenLevel)
             .ThenByDescending(p => p.RallySize)
             .FirstOrDefault();
 
-        if (hallCaptain != null)
+        // Generate debug info - this will help identify where the filtering is too restrictive
+        var debugInfo = $@"
+Shift {shift} Captain Selection Debug:
+Total willing captains: {willingCaptains.Count}
+Unused captains: {unusedCaptains.Count}
+Shift available captains: {shiftAvailableCaptains.Count}
+Selected captain: {bestCaptain?.InGameName ?? "None"}";
+
+        // If no captain found, store debug info in error message
+        if (bestCaptain == null)
         {
-            buildingAssignments["Hall"] = hallCaptain;
-            unassignedPlayers.Remove(hallCaptain);
-            remainingBuildings.Remove("Hall");
+            throw new Exception($"Unable to find captain for shift {shift}. Debug info: {debugInfo}");
         }
 
-        // Then assign spire captains
-        foreach (var building in remainingBuildings.ToList())
-        {
-            if (building == "Hall") continue;
+        return bestCaptain;
+    }
+    private void AssignTroopsToBuildings(
+        List<BuildingAssignment> buildings,
+        Dictionary<TroopType, TroopPool> troopPools,
+        HashSet<int> usedPlayers)
+    {
+        // Track players used in each shift separately
+        var usedPlayersByShift = new Dictionary<int, HashSet<int>>
+    {
+        { 1, new HashSet<int>() },
+        { 2, new HashSet<int>() }
+    };
 
-            var desiredTroopType = troopTypes[currentTroopTypeIndex % troopTypes.Count];
-            var captain = unassignedPlayers
-                .Where(p => p.IsWillingToCaptain && p.TroopType == desiredTroopType)
-                .OrderByDescending(p => p.MaxDenLevel)
-                .ThenByDescending(p => p.RallySize)
-                .FirstOrDefault();
-
-            if (captain == null)
-            {
-                // If no captain of desired type, try any willing captain
-                captain = unassignedPlayers
-                    .Where(p => p.IsWillingToCaptain)
-                    .OrderByDescending(p => p.MaxDenLevel)
-                    .ThenByDescending(p => p.RallySize)
-                    .FirstOrDefault();
-            }
-
-            if (captain != null)
-            {
-                buildingAssignments[building] = captain;
-                unassignedPlayers.Remove(captain);
-                remainingBuildings.Remove(building);
-            }
-
-            currentTroopTypeIndex++;
-        }
-
-        // Now create assignments with the selected captains
+        // First, mark all captains as used in their respective shifts
         foreach (var building in buildings)
         {
-            if (buildingAssignments.TryGetValue(building, out var captain))
+            foreach (var (shift, rally) in building.Shifts)
             {
-                var assignment = new BuildingAssignment
+                if (rally.Captain != null)
+                {
+                    usedPlayersByShift[shift].Add(rally.Captain.Id);
+                    if (rally.Captain.PreferredShift != 3 && rally.Captain.PreferredShift != 4)
                     {
-                        BuildingName = building,
-                        Captain = captain,
-                        TotalCapacity = captain.RallySize
-                    };
-
-                var potentialMembers = unassignedPlayers
-                    .Where(p => p.TroopType == captain.TroopType)
-                    .OrderByDescending(p => p.TroopLevel)
-                    .ThenByDescending(p => p.TroopCapacity)
-                    .ToList();
-
-                AssignTroops(assignment, potentialMembers, building == "Hall");
-
-                // Remove assigned players from unassigned pool
-                foreach (var member in assignment.Members)
-                {
-                    unassignedPlayers.Remove(member.Player);
-                }
-
-                assignments.Add(assignment);
-            }
-            else
-            {
-                assignments.Add(new BuildingAssignment
-                    {
-                        BuildingName = building,
-                        TotalCapacity = 0
-                    });
-            }
-        }
-
-        return assignments;
-    }
-
-    private void AssignTroops(BuildingAssignment assignment, List<Player> potentialMembers, bool isHall)
-    {
-        // First pass: Ensure minimum 10K for everyone
-        foreach (var player in potentialMembers)
-        {
-            if (assignment.AvailableCapacity < 10000) break;
-
-            assignment.Members.Add(new RallyMember
-                {
-                    Player = player,
-                    AssignedTroops = 10000
-                });
-            assignment.UsedCapacity += 10000;
-        }
-
-        // Second pass: Distribute remaining capacity by tier
-        foreach (var tierLevel in new[] { 10, 9, 8, 7 })
-        {
-            var tierMembers = assignment.Members
-                .Where(m => m.Player.TroopLevel == tierLevel)
-                .OrderByDescending(m => m.Player.TroopCapacity)
-                .ToList();
-
-            if (!tierMembers.Any()) continue;
-
-            var remainingCapacity = assignment.AvailableCapacity;
-            if (remainingCapacity <= 0) break;
-
-            if (isHall)
-            {
-                // For Hall: Maximize higher tier troops
-                foreach (var member in tierMembers)
-                {
-                    var additional = Math.Min(
-                        member.Player.TroopCapacity - member.AssignedTroops,
-                        remainingCapacity
-                    );
-                    member.AssignedTroops += additional;
-                    assignment.UsedCapacity += additional;
-                    remainingCapacity -= additional;
-                }
-            }
-            else
-            {
-                // For Spires: Distribute evenly
-                var extraPerMember = remainingCapacity / tierMembers.Count;
-                foreach (var member in tierMembers)
-                {
-                    var additional = Math.Min(
-                        member.Player.TroopCapacity - member.AssignedTroops,
-                        extraPerMember
-                    );
-                    member.AssignedTroops += additional;
-                    assignment.UsedCapacity += additional;
-                    remainingCapacity -= additional;
-                }
-            }
-        }
-    }
-    private string FormatAssignments(List<BuildingAssignment> assignments)
-    {
-        var sb = new StringBuilder();
-
-        foreach (var assignment in assignments)
-        {
-            sb.AppendLine($"=== {assignment.BuildingName} ===");
-
-            if (assignment.Captain != null)
-            {
-                sb.AppendLine($"Captain: {assignment.Captain.InGameName} [{assignment.Captain.Alliance}]");
-                sb.AppendLine($"T{assignment.Captain.TroopLevel} {assignment.Captain.TroopType}");
-                sb.AppendLine($"Rally Size: {assignment.TotalCapacity:N0}");
-                sb.AppendLine();
-
-                if (assignment.Members.Any())
-                {
-                    sb.AppendLine("Members:");
-                    foreach (var member in assignment.Members)
-                    {
-                        sb.AppendLine($"- {member.Player.InGameName} [{member.Player.Alliance}]");
-                        sb.AppendLine($"  T{member.Player.TroopLevel} {member.Player.TroopType}: {member.AssignedTroops:N0} troops");
+                        usedPlayers.Add(rally.Captain.Id); // Mark as used globally if not available for both shifts
                     }
                 }
-                else
-                {
-                    sb.AppendLine("No additional members assigned");
-                }
-
-                sb.AppendLine($"Total Used: {assignment.UsedCapacity:N0}/{assignment.TotalCapacity:N0}");
             }
-            else
-            {
-                sb.AppendLine("No captain available for this building");
-                sb.AppendLine("Building needs assignment");
-            }
-
-            sb.AppendLine();
         }
 
-        return sb.ToString();
+        // Assign Hall first
+        var hall = buildings.First(b => b.IsHall);
+        foreach (var (shift, rally) in hall.Shifts)
+        {
+            AssignTroopsToRally(rally, troopPools[rally.TroopType], usedPlayersByShift[shift], true);
+        }
+
+        // Then assign Spires
+        foreach (var building in buildings.Where(b => !b.IsHall))
+        {
+            foreach (var (shift, rally) in building.Shifts)
+            {
+                AssignTroopsToRally(rally, troopPools[rally.TroopType], usedPlayersByShift[shift], false);
+            }
+        }
     }
 
+    private void AssignTroopsToRally(
+        RallyTeam rally,
+        TroopPool pool,
+        HashSet<int> usedPlayersInShift,
+        bool isHall)
+    {
+        if (rally.Captain == null) return;
 
+        // Get available players who haven't been used in this shift
+        var availablePlayers = pool.AvailablePlayers
+            .Where(p => !usedPlayersInShift.Contains(p.Id) &&
+                        p.Id != rally.Captain.Id &&
+                        p.TroopCapacity >= 10000)
+            .OrderByDescending(p => isHall ? p.TroopLevel : p.TroopCapacity)
+            .ThenByDescending(p => p.TroopCapacity)
+            .ToList();
+
+        foreach (var player in availablePlayers)
+        {
+            if (rally.UsedCapacity >= rally.RallyCapacity) break;
+
+            var availableSpace = rally.RallyCapacity - rally.UsedCapacity;
+            var assignedTroops = Math.Min(player.TroopCapacity, availableSpace);
+
+            if (assignedTroops >= 10000)
+            {
+                rally.Members.Add((player, assignedTroops));
+                rally.UsedCapacity += assignedTroops;
+                pool.AvailableCapacity -= assignedTroops;
+                usedPlayersInShift.Add(player.Id); // Mark as used for this shift
+            }
+        }
+    }
+    public static class AssignmentFormatter
+    {
+        public static string FormatAssignments(List<BuildingAssignment> assignments)
+        {
+            var sb = new StringBuilder();
+
+            foreach (var building in assignments)
+            {
+                sb.AppendLine($"=== {building.Name} ===");
+
+                foreach (var shift in building.Shifts.OrderBy(s => s.Key))
+                {
+                    FormatShift(sb, shift.Key, shift.Value);
+                    sb.AppendLine();
+                }
+
+                if (building != assignments.Last())
+                {
+                    sb.AppendLine();
+                }
+            }
+
+            return sb.ToString();
+        }
+
+        private static void FormatShift(StringBuilder sb, int shiftNumber, RallyTeam rally)
+        {
+            if (rally.Captain == null) return;
+
+            sb.AppendLine($"Shift {shiftNumber}:");
+            sb.AppendLine($"Captain: {FormatPlayerInfo(rally.Captain, rally.Captain.RallySize)}");
+
+            if (rally.Members.Any())
+            {
+                sb.AppendLine("Members:");
+                foreach (var (player, troops) in rally.Members.OrderByDescending(m => m.Troops))
+                {
+                    sb.AppendLine($"  {FormatPlayerInfo(player, troops)}");
+                }
+            }
+
+            var utilizationPercent = rally.RallyCapacity > 0
+                ? (rally.UsedCapacity * 100.0) / rally.RallyCapacity
+                : 0;
+            sb.AppendLine($"Rally Utilization: {rally.UsedCapacity:N0}/{rally.RallyCapacity:N0} ({utilizationPercent:F1}%)");
+        }
+
+        private static string FormatPlayerInfo(Player player, int troopCount)
+        {
+            return $"{player.InGameName} [{player.Alliance}] - T{player.TroopLevel} {player.TroopType} ({troopCount:N0})";
+        }
+    }
 }
