@@ -69,7 +69,7 @@
                                     <option value="@type">@type</option>
                                 }
                             </InputSelect>
-                            <label for="troopType">Troop Type</label>
+                            <label for="troopType">Troop Type - Highest you have</label>
                         </div>
                     </div>
                     <div class="col-md-6">
@@ -81,7 +81,7 @@
                                 <option value="10">T10</option>
                                 <option value="11">T11</option>
                             </InputSelect>
-                            <label for="troopLevel">Troop Level</label>
+                            <label for="troopLevel">Troop Level - Highest you have even if not full march</label>
                         </div>
                     </div>
                 </div>
@@ -96,7 +96,7 @@
                     <div class="col-md-6">
                         <div class="form-floating mb-2">
                             <InputNumber @bind-Value="player.RallySize" class="form-control" id="rallySize" />
-                            <label for="rallySize">Rally Size</label>
+                            <label for="rallySize">Rally Size - Only required if you want to captain</label>
                         </div>
                     </div>
                 </div>
@@ -105,7 +105,7 @@
                     <div class="col-md-6">
                         <div class="form-floating mb-2">
                             <InputNumber @bind-Value="player.MaxDenLevel" class="form-control" id="maxDenLevel" />
-                            <label for="maxDenLevel">Max Den Level (Solo)</label>
+                            <label for="maxDenLevel">Highest Den you have ever solo'd </label>
                         </div>
                     </div>
                     <div class="col-md-6">
@@ -114,7 +114,6 @@
                                 <option value="1">Shift 1 (First 4 hours)</option>
                                 <option value="2">Shift 2 (Last 4 hours)</option>
                                 <option value="3">Both Shifts</option>
-                                <option value="4">Any Shift</option>
                             </InputSelect>
                             <label for="preferredShift">Preferred Shift</label>
                         </div>
