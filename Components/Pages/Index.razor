@@ -1,0 +1,316 @@
+﻿@using ConquestOfLords.Data
+@using Microsoft.EntityFrameworkCore
+@page "/"
+@inject ConquestOfLords.Data.AppDbContext Db
+@rendermode InteractiveServer
+
+<PageTitle>CoL Event Registration</PageTitle>
+
+<div class="container mt-3">
+    <h2>Conquest of Lords Event Registration</h2>
+
+    <div class="btn-group mb-3" role="group">
+        <button class="btn @(isNewRegistration ? "btn-primary" : "btn-outline-primary")"
+                @onclick="() => SwitchMode(true)">
+            New Registration
+        </button>
+        <button class="btn @(!isNewRegistration ? "btn-primary" : "btn-outline-primary")"
+                @onclick="() => SwitchMode(false)">
+            Update Existing
+        </button>
+    </div>
+
+    @if (!isNewRegistration)
+    {
+        <div class="row mb-3">
+            <div class="col-md-6">
+                <div class="input-group">
+                    <input type="text" class="form-control" @bind="accessCodeInput"
+                           placeholder="Enter your access code" maxlength="6" />
+                    <button class="btn btn-primary" @onclick="LoadExistingPlayer">
+                        Load Details
+                    </button>
+                </div>
+                @if (!string.IsNullOrEmpty(loadMessage))
+                {
+                    <div class="alert alert-@loadMessageType py-1 mt-2">@loadMessage</div>
+                }
+            </div>
+        </div>
+    }
+
+    <div class="row">
+        <div class="col-md-8">
+            <EditForm Model="@player" OnValidSubmit="HandleSubmit" FormName="registration">
+                <DataAnnotationsValidator />
+                <ValidationSummary />
+
+                <div class="row g-2">
+                    <div class="col-md-6">
+                        <div class="form-floating mb-2">
+                            <InputText @bind-Value="player.InGameName" class="form-control" id="inGameName" />
+                            <label for="inGameName">In-Game Name</label>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="form-floating mb-2">
+                            <InputText @bind-Value="player.Alliance" class="form-control" id="alliance" maxlength="3" />
+                            <label for="alliance">Alliance (3 letters)</label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row g-2">
+                    <div class="col-md-6">
+                        <div class="form-floating mb-2">
+                            <InputSelect @bind-Value="player.TroopType" class="form-select" id="troopType">
+                                @foreach (var type in Enum.GetValues<TroopType>())
+                                {
+                                    <option value="@type">@type</option>
+                                }
+                            </InputSelect>
+                            <label for="troopType">Troop Type</label>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="form-floating mb-2">
+                            <InputSelect @bind-Value="player.TroopLevel" class="form-select" id="troopLevel">
+                                <option value="7">T7</option>
+                                <option value="8">T8</option>
+                                <option value="9">T9</option>
+                                <option value="10">T10</option>
+                                <option value="11">T11</option>
+                            </InputSelect>
+                            <label for="troopLevel">Troop Level</label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row g-2">
+                    <div class="col-md-6">
+                        <div class="form-floating mb-2">
+                            <InputNumber @bind-Value="player.TroopCapacity" class="form-control" id="troopCapacity" />
+                            <label for="troopCapacity">Troop Capacity</label>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="form-floating mb-2">
+                            <InputNumber @bind-Value="player.RallySize" class="form-control" id="rallySize" />
+                            <label for="rallySize">Rally Size</label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row g-2">
+                    <div class="col-md-6">
+                        <div class="form-floating mb-2">
+                            <InputNumber @bind-Value="player.MaxDenLevel" class="form-control" id="maxDenLevel" />
+                            <label for="maxDenLevel">Max Den Level (Solo)</label>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="form-floating mb-2">
+                            <InputSelect @bind-Value="player.PreferredShift" class="form-select" id="preferredShift">
+                                <option value="1">Shift 1 (First 4 hours)</option>
+                                <option value="2">Shift 2 (Last 4 hours)</option>
+                                <option value="3">Both Shifts</option>
+                                <option value="4">Any Shift</option>
+                            </InputSelect>
+                            <label for="preferredShift">Preferred Shift</label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row g-2 mt-2">
+                    <div class="col-md-6">
+                        <div class="form-check">
+                            <InputCheckbox @bind-Value="player.IsAvailableExtendedHours" class="form-check-input" id="extendedHours" />
+                            <label class="form-check-label" for="extendedHours">
+                                Available for Extended Hours
+                            </label>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="form-check">
+                            <InputCheckbox @bind-Value="player.IsWillingToCaptain" class="form-check-input" id="captain" />
+                            <label class="form-check-label" for="captain">
+                                Willing to be Captain
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                @if (!string.IsNullOrEmpty(message))
+                {
+                    <div class="alert alert-@messageType py-2 mt-3" role="alert">
+                        @message
+                    </div>
+                }
+
+                <div class="mt-3">
+                    <button type="submit" class="btn btn-primary">
+                        @(isNewRegistration ? "Register" : "Update")
+                    </button>
+                </div>
+            </EditForm>
+        </div>
+
+        @if (!string.IsNullOrEmpty(accessCode))
+        {
+            <div class="col-md-4">
+                <div class="alert alert-success">
+                    <h5>Registration Successful!</h5>
+                    <p class="mb-0">
+                        Your access code is: <strong>@accessCode</strong>
+                        <br />
+                        Please save this code - you'll need it to update your information later.
+                    </p>
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    private bool isNewRegistration = true;
+    private Player player = new();
+    private string message = "";
+    private string messageType = "";
+    private string accessCode = "";
+    private string accessCodeInput = "";
+    private string loadMessage = "";
+    private string loadMessageType = "";
+
+    protected override void OnInitialized()
+    {
+        // Set default values
+        player = new Player
+            {
+                TroopLevel = 7,
+                PreferredShift = 1
+            };
+    }
+
+    private void SwitchMode(bool newRegistration)
+    {
+        isNewRegistration = newRegistration;
+        // Reset messages and form when switching modes
+        message = "";
+        loadMessage = "";
+        if (newRegistration)
+        {
+            player = new Player
+                {
+                    TroopLevel = 7,
+                    PreferredShift = 1
+                };
+        }
+    }
+
+    private async Task LoadExistingPlayer()
+    {
+        if (string.IsNullOrWhiteSpace(accessCodeInput))
+        {
+            loadMessage = "Please enter an access code";
+            loadMessageType = "warning";
+            return;
+        }
+
+        var existingPlayer = await Db.Players
+            .FirstOrDefaultAsync(p => p.AccessCode == accessCodeInput.Trim().ToUpper());
+
+        if (existingPlayer == null)
+        {
+            loadMessage = "No player found with this access code";
+            loadMessageType = "danger";
+            return;
+        }
+
+        player = existingPlayer;
+        loadMessage = "Player details loaded successfully";
+        loadMessageType = "success";
+    }
+
+    private async Task HandleSubmit()
+    {
+        try
+        {
+            // Validation
+            if (string.IsNullOrWhiteSpace(player.InGameName))
+            {
+                message = "In-Game Name is required";
+                messageType = "danger";
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(player.Alliance))
+            {
+                message = "Alliance tag is required";
+                messageType = "danger";
+                return;
+            }
+
+            if (player.Alliance.Length != 3)
+            {
+                message = "Alliance tag must be exactly 3 letters";
+                messageType = "danger";
+                return;
+            }
+
+            if (player.TroopCapacity < 10000)
+            {
+                message = "Minimum troop capacity is 10,000";
+                messageType = "danger";
+                return;
+            }
+
+            // Convert alliance to uppercase
+            player.Alliance = player.Alliance.ToUpper();
+            player.IsParticipating = true;
+
+            if (isNewRegistration)
+            {
+                // Generate new access code only for new registrations
+                player.AccessCode = GenerateAccessCode();
+                await Db.Players.AddAsync(player);
+            }
+            else
+            {
+                // For updates, just update the LastUpdated timestamp
+                player.LastUpdated = DateTime.UtcNow;
+                Db.Players.Update(player);
+            }
+
+            await Db.SaveChangesAsync();
+
+            accessCode = player.AccessCode;
+            message = isNewRegistration ? "Registration successful!" : "Update successful!";
+            messageType = "success";
+
+            if (isNewRegistration)
+            {
+                // Only reset form for new registrations
+                player = new()
+                    {
+                        TroopLevel = 7,
+                        PreferredShift = 1
+                    };
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(ex);
+            message = isNewRegistration
+                ? "Error saving registration. The in-game name might already be taken."
+                : "Error updating registration.";
+            messageType = "danger";
+        }
+    }
+
+    private static string GenerateAccessCode()
+    {
+        const string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+        return new string(Enumerable.Repeat(chars, 6)
+            .Select(s => s[Random.Shared.Next(s.Length)]).ToArray());
+    }
+}

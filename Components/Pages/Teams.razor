@@ -1,0 +1,41 @@
+﻿@page "/teams"
+@using ConquestOfLords.Data
+@using Microsoft.EntityFrameworkCore
+@inject AppDbContext Db
+@rendermode InteractiveServer
+
+<PageTitle>CoL Event Teams</PageTitle>
+
+<div class="container mt-3">
+    <h2>Team Assignments</h2>
+
+    @if (currentAssignment != null)
+    {
+        <div class="card">
+            <div class="card-body">
+                <pre class="mb-0" style="white-space: pre-wrap;">@currentAssignment.AssignmentText</pre>
+            </div>
+            <div class="card-footer">
+                <small class="text-muted">Last updated: @currentAssignment.CreatedAt.ToString("g")</small>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="alert alert-info">
+            No team assignments have been posted yet.
+        </div>
+    }
+</div>
+
+@code {
+    private TeamAssignment? currentAssignment;
+
+    protected override async Task OnInitializedAsync()
+    {
+        currentAssignment = await Db.TeamAssignments
+            .Where(ta => ta.IsActive)
+            .OrderByDescending(ta => ta.CreatedAt)
+            .FirstOrDefaultAsync();
+    }
+}

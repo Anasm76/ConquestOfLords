@@ -1,0 +1,426 @@
+﻿@inject IJSRuntime JSRuntime
+@using ConquestOfLords.Data
+@using Microsoft.EntityFrameworkCore
+@using System.Linq
+@page "/admin"
+@using ConquestOfLords.Data
+@using Microsoft.EntityFrameworkCore
+@using System.Text
+@inject IConfiguration Configuration
+@inject AppDbContext Db
+@rendermode InteractiveServer
+
+<PageTitle>CoL Event Admin</PageTitle>
+
+@if (!isAuthenticated)
+{
+    <div class="container mt-4">
+        <div class="row justify-content-center">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-body">
+                        <h3 class="card-title">Admin Login</h3>
+                        <div class="mb-3">
+                            <label class="form-label">Password</label>
+                            <input type="password" class="form-control" @bind="password" @onkeypress="HandleKeyPress" />
+                        </div>
+                        @if (!string.IsNullOrEmpty(message))
+                        {
+                            <div class="alert alert-danger">@message</div>
+                        }
+                        <button class="btn btn-primary" @onclick="Authenticate">Login</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+else
+{
+    <div class="container-fluid mt-4">
+        <h2>Event Administration</h2>
+
+        <div class="row mb-4">
+            <div class="col">
+                <div class="btn-group">
+                    <button class="btn btn-warning" @onclick="ResetAllParticipation">
+                        Reset All Participation
+                    </button>
+                    <button class="btn btn-primary" @onclick="GenerateTeams">
+                        Generate Teams
+                    </button>
+                    @if (!string.IsNullOrEmpty(generatedAssignments))
+                    {
+                        <button class="btn btn-success" @onclick="SaveAssignments">
+                            Save Assignments
+                        </button>
+                    }
+                </div>
+            </div>
+        </div>
+
+        @if (!string.IsNullOrEmpty(generatedAssignments))
+        {
+            <div class="row mb-4">
+                <div class="col">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="mb-0">Generated Team Assignments</h5>
+                        </div>
+                        <div class="card-body">
+                            <textarea class="form-control" rows="20" @bind="generatedAssignments"></textarea>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+
+        <div class="table-responsive">
+            <table class="table table-striped table-hover">
+                <thead>
+                    <tr>
+                        <th>In-Game Name</th>
+                        <th>Alliance</th>
+                        <th>Troop Type</th>
+                        <th>Level</th>
+                        <th>Capacity</th>
+                        <th>Rally Size</th>
+                        <th>Max Den</th>
+                        <th>Shift</th>
+                        <th>Extended</th>
+                        <th>Captain</th>
+                        <th>Active</th>
+                        <th>Last Updated</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var player in players.OrderByDescending(p => p.LastUpdated))
+                    {
+                        <tr>
+                            <td>@player.InGameName</td>
+                            <td>@player.Alliance</td>
+                            <td>@player.TroopType</td>
+                            <td>T@player.TroopLevel</td>
+                            <td>@player.TroopCapacity.ToString("N0")</td>
+                            <td>@player.RallySize.ToString("N0")</td>
+                            <td>@player.MaxDenLevel</td>
+                            <td>@player.PreferredShift</td>
+                            <td>@(player.IsAvailableExtendedHours ? "Yes" : "No")</td>
+                            <td>@(player.IsWillingToCaptain ? "Yes" : "No")</td>
+                            <td>
+                                <div class="form-check">
+                                    <input type="checkbox" class="form-check-input"
+                                           checked="@player.IsParticipating"
+                                           @onchange="async (e) => await ToggleParticipation(player, e.Value)" />
+                                </div>
+                            </td>
+                            <td>@player.LastUpdated.ToString("g")</td>
+                            <td>
+                                <button class="btn btn-danger btn-sm" @onclick="() => DeletePlayer(player)">
+                                    Delete
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+
+@code {
+    private bool isAuthenticated;
+    private string password = "";
+    private string message = "";
+    private List<Player> players = new();
+    private string generatedAssignments = "";
+    private string? saveMessage;
+    private string saveMessageType = "success";
+    private TeamAssignment? currentAssignment;
+
+    public class Team
+    {
+        public Player Captain { get; set; } = null!;
+        public List<Player> Members { get; } = new();
+        public TroopType TroopType => Captain.TroopType;
+        public int ShiftNumber => Captain.PreferredShift;
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshPlayers();
+        if (isAuthenticated)
+        {
+            await LoadCurrentAssignment();
+        }
+    }
+
+    private async Task RefreshPlayers()
+    {
+        if (isAuthenticated)
+        {
+            players = await Db.Players
+                .OrderByDescending(p => p.LastUpdated)
+                .ToListAsync();
+        }
+    }
+    private async Task LoadCurrentAssignment()
+    {
+        currentAssignment = await Db.TeamAssignments
+            .Where(ta => ta.IsActive)
+            .OrderByDescending(ta => ta.CreatedAt)
+            .FirstOrDefaultAsync();
+
+        if (currentAssignment != null)
+        {
+            generatedAssignments = currentAssignment.AssignmentText;
+        }
+    }
+    private async Task HandleKeyPress(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await Authenticate();
+        }
+    }
+
+    private Task Authenticate()
+    {
+        var adminPassword = Configuration["AdminSettings:Password"];
+        if (password == adminPassword)
+        {
+            isAuthenticated = true;
+            message = "";
+            return RefreshPlayers();
+        }
+
+        message = "Invalid password";
+        password = "";
+        return Task.CompletedTask;
+    }
+
+    private async Task ToggleParticipation(Player player, object? isChecked)
+    {
+        if (isChecked is bool isParticipating)
+        {
+            player.IsParticipating = isParticipating;
+            player.LastUpdated = DateTime.UtcNow;
+            await Db.SaveChangesAsync();
+        }
+    }
+
+    private async Task ResetAllParticipation()
+    {
+        if (!await ShowConfirmation("Are you sure you want to reset all participation flags?"))
+            return;
+
+        foreach (var player in players)
+        {
+            player.IsParticipating = false;
+            player.LastUpdated = DateTime.UtcNow;
+        }
+
+        await Db.SaveChangesAsync();
+    }
+
+    private async Task DeletePlayer(Player player)
+    {
+        if (!await ShowConfirmation($"Are you sure you want to delete {player.InGameName}?"))
+            return;
+
+        Db.Players.Remove(player);
+        await Db.SaveChangesAsync();
+        await RefreshPlayers();
+    }
+
+    private Task<bool> ShowConfirmation(string message)
+    {
+        return Task.FromResult(true);
+    }
+
+
+    private async Task GenerateTeams()
+    {
+        var activePlayers = players.Where(p => p.IsParticipating && p.TroopCapacity >= 10000).ToList();
+        var assignments = GenerateAssignments(activePlayers);
+        generatedAssignments = FormatAssignments(assignments);
+        StateHasChanged();
+    }
+    private async Task SaveAssignments()
+    {
+        if (string.IsNullOrWhiteSpace(generatedAssignments))
+            return;
+
+        try
+        {
+            // Deactivate all current assignments
+            var currentAssignments = await Db.TeamAssignments.Where(ta => ta.IsActive).ToListAsync();
+            foreach (var assignment in currentAssignments)
+            {
+                assignment.IsActive = false;
+            }
+
+            // Create new assignment
+            var newAssignment = new TeamAssignment
+                {
+                    AssignmentText = generatedAssignments,
+                    IsActive = true
+                };
+
+            Db.TeamAssignments.Add(newAssignment);
+            await Db.SaveChangesAsync();
+
+            currentAssignment = newAssignment;
+            saveMessage = "Team assignments saved successfully!";
+            saveMessageType = "success";
+        }
+        catch (Exception)
+        {
+            saveMessage = "Error saving team assignments.";
+            saveMessageType = "danger";
+        }
+    }
+
+    private class BuildingAssignment
+    {
+        public string BuildingName { get; set; } = "";
+        public Player Captain { get; set; } = null!;
+        public List<RallyMember> Members { get; set; } = new();
+        public int TotalCapacity { get; set; }
+        public int UsedCapacity { get; set; }
+        public int AvailableCapacity => TotalCapacity - UsedCapacity;
+    }
+
+    private class RallyMember
+    {
+        public Player Player { get; set; } = null!;
+        public int AssignedTroops { get; set; }
+    }
+
+    private List<BuildingAssignment> GenerateAssignments(List<Player> availablePlayers)
+    {
+        var assignments = new List<BuildingAssignment>();
+        var unassignedPlayers = new List<Player>(availablePlayers);
+        var buildings = new[] { "Hall", "North Spire", "South Spire", "East Spire", "West Spire" };
+
+        foreach (var building in buildings)
+        {
+            var isHall = building == "Hall";
+
+            // Get available captains
+            var captain = unassignedPlayers
+                .Where(p => p.IsWillingToCaptain)
+                .OrderByDescending(p => p.MaxDenLevel)
+                .ThenByDescending(p => p.RallySize)
+                .FirstOrDefault();
+
+            if (captain == null) continue;
+            unassignedPlayers.Remove(captain);
+
+            var assignment = new BuildingAssignment
+                {
+                    BuildingName = building,
+                    Captain = captain,
+                    TotalCapacity = captain.RallySize
+                };
+
+            // Find matching troop type players
+            var potentialMembers = unassignedPlayers
+                .Where(p => p.TroopType == captain.TroopType)
+                .OrderByDescending(p => p.TroopLevel)
+                .ThenByDescending(p => p.TroopCapacity)
+                .ToList();
+
+            AssignTroops(assignment, potentialMembers, isHall);
+
+            // Remove assigned players from unassigned pool
+            foreach (var member in assignment.Members)
+            {
+                unassignedPlayers.Remove(member.Player);
+            }
+
+            assignments.Add(assignment);
+        }
+
+        return assignments;
+    }
+
+    private void AssignTroops(BuildingAssignment assignment, List<Player> potentialMembers, bool isHall)
+    {
+        foreach (var tierLevel in new[] { 10, 9, 8, 7 })
+        {
+            var tierPlayers = potentialMembers.Where(p => p.TroopLevel == tierLevel).ToList();
+
+            foreach (var player in tierPlayers)
+            {
+                if (assignment.AvailableCapacity < 10000)
+                    break;
+
+                var assignedTroops = tierLevel == 10 || isHall
+                    ? Math.Min(player.TroopCapacity, assignment.AvailableCapacity)
+                    : Math.Min(10000, assignment.AvailableCapacity);
+
+                if (assignedTroops >= 10000)
+                {
+                    assignment.Members.Add(new RallyMember
+                        {
+                            Player = player,
+                            AssignedTroops = assignedTroops
+                        });
+                    assignment.UsedCapacity += assignedTroops;
+                }
+            }
+
+            // Distribute remaining capacity for non-T10 players if this is the Hall
+            if (isHall && tierLevel < 10 && assignment.AvailableCapacity > 0)
+            {
+                var membersAtTier = assignment.Members
+                    .Where(m => m.Player.TroopLevel == tierLevel)
+                    .ToList();
+
+                if (membersAtTier.Any())
+                {
+                    var extraCapacityPerMember = assignment.AvailableCapacity / membersAtTier.Count;
+                    foreach (var member in membersAtTier)
+                    {
+                        var extraTroops = Math.Min(
+                            member.Player.TroopCapacity - member.AssignedTroops,
+                            extraCapacityPerMember
+                        );
+                        member.AssignedTroops += extraTroops;
+                        assignment.UsedCapacity += extraTroops;
+                    }
+                }
+            }
+        }
+    }
+
+    private string FormatAssignments(List<BuildingAssignment> assignments)
+    {
+        var sb = new StringBuilder();
+
+        foreach (var assignment in assignments)
+        {
+            sb.AppendLine($"=== {assignment.BuildingName} ===");
+            sb.AppendLine($"Captain: {assignment.Captain.InGameName} [{assignment.Captain.Alliance}]");
+            sb.AppendLine($"T{assignment.Captain.TroopLevel} {assignment.Captain.TroopType}");
+            sb.AppendLine($"Rally Size: {assignment.TotalCapacity:N0}");
+            sb.AppendLine();
+
+            sb.AppendLine("Members:");
+            foreach (var member in assignment.Members)
+            {
+                sb.AppendLine($"- {member.Player.InGameName} [{member.Player.Alliance}]");
+                sb.AppendLine($"  T{member.Player.TroopLevel} {member.Player.TroopType}: {member.AssignedTroops:N0} troops");
+            }
+
+            sb.AppendLine($"Total Used: {assignment.UsedCapacity:N0}/{assignment.TotalCapacity:N0}");
+            sb.AppendLine();
+        }
+
+        return sb.ToString();
+    }
+
+
+}
