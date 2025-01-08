@@ -1,7 +1,12 @@
 ﻿<nav class="navbar navbar-expand-lg navbar-dark bg-primary mb-4">
     <div class="container">
         <a class="navbar-brand" href="/">Conquest of Lords</a>
-        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+        <button class="navbar-toggler" type="button"
+                data-bs-toggle="collapse"
+                data-bs-target="#navbarNav"
+                aria-controls="navbarNav"
+                aria-expanded="false"
+                aria-label="Toggle navigation">
             <span class="navbar-toggler-icon"></span>
         </button>
         <div class="collapse navbar-collapse" id="navbarNav">
@@ -16,9 +21,14 @@
                     <a class="nav-link @(GetCurrentPage() == "/admin" ? "active" : "")" href="/admin">Admin</a>
                 </li>
             </ul>
-            <span class="navbar-text">
+            <span class="navbar-text d-none d-lg-inline">
                 Credits to Melody14 and Annou | Contact: <a href="mailto:anas76@gmail.com" class="text-light">anas76@gmail.com</a> or Annou in game
             </span>
+            <div class="d-lg-none navbar-text text-center mt-3">
+                Credits to Melody14 and Annou<br />
+                Contact: <a href="mailto:anas76@gmail.com" class="text-light">anas76@gmail.com</a><br />
+                or Annou in game
+            </div>
         </div>
     </div>
 </nav>
