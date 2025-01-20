@@ -1,4 +1,5 @@
 ﻿@inject IJSRuntime JSRuntime
+@using Microsoft.JSInterop
 @using ConquestOfLords.Data
 @using Microsoft.EntityFrameworkCore
 @using System.Linq
@@ -90,6 +91,7 @@ else
                         <th>Extended</th>
                         <th>Captain</th>
                         <th>Active</th>
+                        <th>Access Code</th>
                         <th>Last Updated</th>
                         <th>Actions</th>
                     </tr>
@@ -114,6 +116,11 @@ else
                                            checked="@player.IsParticipating"
                                            @onchange="async (e) => await ToggleParticipation(player, e.Value)" />
                                 </div>
+                            </td>
+                            <td>
+                                <span class="text-primary" role="button" style="cursor: pointer" @onclick="() => CopyInviteCode(player.AccessCode)">
+                                    @player.AccessCode
+                                </span>
                             </td>
                             <td>@player.LastUpdated.ToString("g")</td>
                             <td>
@@ -289,7 +296,11 @@ else
             saveMessageType = "danger";
         }
     }
-
+    private async Task CopyInviteCode(string accessCode)
+    {
+        var text = $"Your code for CoL is {accessCode} and the URL is https://rb.gy/kdbdyg";
+        await JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", text);
+    }
     // Make these classes public so they can be accessed by AssignmentFormatter
     public class BuildingAssignment
     {

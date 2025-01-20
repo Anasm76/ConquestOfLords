@@ -11,22 +11,22 @@
 
     <div class="btn-group mb-3" role="group">
         <button class="btn @(isNewRegistration ? "btn-primary" : "btn-outline-primary")"
-                @onclick="() => SwitchMode(true)">
-            New Registration
-        </button>
-        <button class="btn @(!isNewRegistration ? "btn-primary" : "btn-outline-primary")"
                 @onclick="() => SwitchMode(false)">
             Update Existing
         </button>
+        <button class="btn @(!isNewRegistration ? "btn-primary" : "btn-outline-primary")"
+                @onclick="() => SwitchMode(true)">
+            New Registration
+        </button>
     </div>
-
+    <span> Click on the New Registration button if you never registered before, otherwise enter your access code in the box below</span>
     @if (!isNewRegistration)
     {
         <div class="row mb-3">
             <div class="col-md-6">
                 <div class="input-group">
                     <input type="text" class="form-control" @bind="accessCodeInput"
-                           placeholder="Enter your access code" maxlength="6" />
+                           placeholder="Enter your access code" autocomplete="on" name="access-code" id="access-code" maxlength="6" />
                     <button class="btn btn-primary" @onclick="LoadExistingPlayer">
                         Load Details
                     </button>
@@ -171,7 +171,7 @@
 </div>
 
 @code {
-    private bool isNewRegistration = true;
+    private bool isNewRegistration = false;
     private Player player = new();
     private string message = "";
     private string messageType = "";
