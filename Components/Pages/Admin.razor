@@ -27,7 +27,28 @@
 @rendermode InteractiveServer
 
 <PageTitle>CoL Event Admin</PageTitle>
+<div class="modal @(isConfirmDialogVisible ? "show d-block" : "d-none")" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Confirm Action</h5>
+                <button type="button" class="btn-close" @onclick="CancelConfirmation"></button>
+            </div>
+            <div class="modal-body">
+                <p>@confirmationMessage</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" @onclick="CancelConfirmation">Cancel</button>
+                <button type="button" class="btn btn-danger" @onclick="ConfirmAction">Delete</button>
+            </div>
+        </div>
+    </div>
+</div>
 
+@if (isConfirmDialogVisible)
+{
+    <div class="modal-backdrop show"></div>
+}
 @if (!isAuthenticated)
 {
     <div class="container mt-4">
@@ -210,6 +231,10 @@ else
     private TeamAssignment? currentAssignment;
     private string currentSortColumn = "LastUpdated";
     private bool isAscending = false;
+    private bool isConfirmDialogVisible = false;
+    private string confirmationMessage = "";
+    private Player? playerToDelete;
+    private TaskCompletionSource<bool>? confirmationTcs;
 
     public class Team
     {
@@ -352,19 +377,37 @@ else
 
     private async Task DeletePlayer(Player player)
     {
-        if (!await ShowConfirmation($"Are you sure you want to delete {player.InGameName}?"))
+        playerToDelete = player;  // Store the player to delete
+        if (!await ShowConfirmation($"Are you sure you want to delete {player.InGameName}? This action cannot be undone."))
+        {
+            playerToDelete = null;  // Clear if cancelled
             return;
+        }
 
-        Db.Players.Remove(player);
+        Db.Players.Remove(playerToDelete);
         await Db.SaveChangesAsync();
+        playerToDelete = null;  // Clear after deletion
         await RefreshPlayers();
     }
 
     private Task<bool> ShowConfirmation(string message)
     {
-        return Task.FromResult(true);
+        confirmationMessage = message;
+        isConfirmDialogVisible = true;
+        confirmationTcs = new TaskCompletionSource<bool>();
+        return confirmationTcs.Task;
+    }
+    private void CancelConfirmation()
+    {
+        isConfirmDialogVisible = false;
+        confirmationTcs?.SetResult(false);
     }
 
+    private void ConfirmAction()
+    {
+        isConfirmDialogVisible = false;
+        confirmationTcs?.SetResult(true);
+    }
 
     private async Task GenerateTeams()
     {
