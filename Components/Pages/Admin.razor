@@ -4,6 +4,21 @@
 @using Microsoft.EntityFrameworkCore
 @using System.Linq
 @page "/admin"
+<style>
+    .sortable {
+        cursor: pointer;
+        user-select: none;
+    }
+
+        .sortable:hover {
+            background-color: rgba(0,0,0,0.05);
+        }
+
+    .sort-indicator {
+        display: inline-block;
+        margin-left: 0.25rem;
+    }
+</style>
 @using ConquestOfLords.Data
 @using Microsoft.EntityFrameworkCore
 @using System.Text
@@ -44,9 +59,7 @@ else
         <div class="row mb-4">
             <div class="col">
                 <div class="btn-group">
-                    <button class="btn btn-warning" @onclick="ResetAllParticipation">
-                        Reset All Participation
-                    </button>
+
                     <button class="btn btn-primary" @onclick="GenerateTeams">
                         Generate Teams
                     </button>
@@ -80,24 +93,74 @@ else
             <table class="table table-striped table-hover">
                 <thead>
                     <tr>
-                        <th>In-Game Name</th>
-                        <th>Alliance</th>
-                        <th>Troop Type</th>
-                        <th>Level</th>
-                        <th>Capacity</th>
-                        <th>Rally Size</th>
-                        <th>Max Den</th>
-                        <th>Shift</th>
+                        <th class="sortable" @onclick="() => SortBy(nameof(Player.InGameName))">
+                            <div class="d-flex align-items-center">
+                                In-Game Name
+                                <span class="sort-indicator">@(GetSortIndicator(nameof(Player.InGameName)))</span>
+                            </div>
+                        </th>
+                        <th class="sortable" @onclick="() => SortBy(nameof(Player.Alliance))">
+                            <div class="d-flex align-items-center">
+                                Alliance
+                                <span class="sort-indicator">@(GetSortIndicator(nameof(Player.Alliance)))</span>
+                            </div>
+                        </th>
+                        <th class="sortable" @onclick="() => SortBy(nameof(Player.TroopType))">
+                            <div class="d-flex align-items-center">
+                                Troop Type
+                                <span class="sort-indicator">@(GetSortIndicator(nameof(Player.TroopType)))</span>
+                            </div>
+                        </th>
+                        <th class="sortable" @onclick="() => SortBy(nameof(Player.TroopLevel))">
+                            <div class="d-flex align-items-center">
+                                Level
+                                <span class="sort-indicator">@(GetSortIndicator(nameof(Player.TroopLevel)))</span>
+                            </div>
+                        </th>
+                        <th class="sortable" @onclick="() => SortBy(nameof(Player.TroopCapacity))">
+                            <div class="d-flex align-items-center">
+                                Capacity
+                                <span class="sort-indicator">@(GetSortIndicator(nameof(Player.TroopCapacity)))</span>
+                            </div>
+                        </th>
+                        <th class="sortable" @onclick="() => SortBy(nameof(Player.RallySize))">
+                            <div class="d-flex align-items-center">
+                                Rally Size
+                                <span class="sort-indicator">@(GetSortIndicator(nameof(Player.RallySize)))</span>
+                            </div>
+                        </th>
+                        <th class="sortable" @onclick="() => SortBy(nameof(Player.MaxDenLevel))">
+                            <div class="d-flex align-items-center">
+                                Max Den
+                                <span class="sort-indicator">@(GetSortIndicator(nameof(Player.MaxDenLevel)))</span>
+                            </div>
+                        </th>
+                        <th class="sortable" @onclick="() => SortBy(nameof(Player.PreferredShift))">
+                            <div class="d-flex align-items-center">
+                                Shift
+                                <span class="sort-indicator">@(GetSortIndicator(nameof(Player.PreferredShift)))</span>
+                            </div>
+                        </th>
                         <th>Extended</th>
                         <th>Captain</th>
-                        <th>Active</th>
+                        <th class="sortable" @onclick="() => SortBy(nameof(Player.IsParticipating))">
+                            <div class="d-flex align-items-center">
+                                Active
+                                <span class="sort-indicator">@(GetSortIndicator(nameof(Player.IsParticipating)))</span>
+                            </div>
+                        </th>
                         <th>Access Code</th>
-                        <th>Last Updated</th>
+                        <th class="sortable" @onclick="() => SortBy(nameof(Player.LastUpdated))">
+                            <div class="d-flex align-items-center">
+                                Last Updated
+                                <span class="sort-indicator">@(GetSortIndicator(nameof(Player.LastUpdated)))</span>
+                            </div>
+                        </th>
                         <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody>
-                    @foreach (var player in players.OrderByDescending(p => p.LastUpdated))
+                    @foreach (var player in SortPlayers(players))
                     {
                         <tr>
                             <td>@player.InGameName</td>
@@ -145,6 +208,8 @@ else
     private string? saveMessage;
     private string saveMessageType = "success";
     private TeamAssignment? currentAssignment;
+    private string currentSortColumn = "LastUpdated";
+    private bool isAscending = false;
 
     public class Team
     {
@@ -191,7 +256,11 @@ else
             await Authenticate();
         }
     }
-
+    private string GetSortIndicator(string column)
+    {
+        if (currentSortColumn != column) return "";
+        return isAscending ? "↑" : "↓";
+    }
     private Task Authenticate()
     {
         var adminPassword = Configuration["AdminSettings:Password"];
@@ -206,7 +275,57 @@ else
         password = "";
         return Task.CompletedTask;
     }
+    private IOrderedEnumerable<Player> SortPlayers(IEnumerable<Player> players)
+    {
+        return currentSortColumn switch
+        {
+            "InGameName" => isAscending
+                ? players.OrderBy(p => p.InGameName)
+                : players.OrderByDescending(p => p.InGameName),
+            "Alliance" => isAscending
+                ? players.OrderBy(p => p.Alliance)
+                : players.OrderByDescending(p => p.Alliance),
+            "TroopType" => isAscending
+                ? players.OrderBy(p => p.TroopType)
+                : players.OrderByDescending(p => p.TroopType),
+            "TroopLevel" => isAscending
+                ? players.OrderBy(p => p.TroopLevel)
+                : players.OrderByDescending(p => p.TroopLevel),
+            "TroopCapacity" => isAscending
+                ? players.OrderBy(p => p.TroopCapacity)
+                : players.OrderByDescending(p => p.TroopCapacity),
+            "RallySize" => isAscending
+                ? players.OrderBy(p => p.RallySize)
+                : players.OrderByDescending(p => p.RallySize),
+            "MaxDenLevel" => isAscending
+                ? players.OrderBy(p => p.MaxDenLevel)
+                : players.OrderByDescending(p => p.MaxDenLevel),
+            "PreferredShift" => isAscending
+                ? players.OrderBy(p => p.PreferredShift)
+                : players.OrderByDescending(p => p.PreferredShift),
+            "IsParticipating" => isAscending
+                ? players.OrderBy(p => p.IsParticipating)
+                : players.OrderByDescending(p => p.IsParticipating),
+            "LastUpdated" => isAscending
+                ? players.OrderBy(p => p.LastUpdated)
+                : players.OrderByDescending(p => p.LastUpdated),
+            _ => players.OrderByDescending(p => p.LastUpdated)
+        };
+    }
 
+    private void SortBy(string column)
+    {
+        if (currentSortColumn == column)
+        {
+            isAscending = !isAscending;
+        }
+        else
+        {
+            currentSortColumn = column;
+            isAscending = true;
+        }
+        StateHasChanged();
+    }
     private async Task ToggleParticipation(Player player, object? isChecked)
     {
         if (isChecked is bool isParticipating)
