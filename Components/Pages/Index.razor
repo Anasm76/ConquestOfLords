@@ -10,16 +10,16 @@
     <h2>Conquest of Lords Event Registration</h2>
 
     <div class="btn-group mb-3" role="group">
-        <button class="btn @(isNewRegistration ? "btn-primary" : "btn-outline-primary")"
-                @onclick="() => SwitchMode(false)">
-            Update Existing
-        </button>
         <button class="btn @(!isNewRegistration ? "btn-primary" : "btn-outline-primary")"
+                @onclick="() => SwitchMode(false)">
+            Update Registration
+        </button>
+        <button class="btn @(isNewRegistration ? "btn-primary" : "btn-outline-primary")"
                 @onclick="() => SwitchMode(true)">
             New Registration
         </button>
     </div>
-    <span> Click on the New Registration button if you never registered before, otherwise enter your access code in the box below</span>
+
     @if (!isNewRegistration)
     {
         <div class="row mb-3">
@@ -31,6 +31,9 @@
                         Load Details
                     </button>
                 </div>
+                <div class="text-muted mt-1">
+                    Don't have a code? Click "New Registration" above
+                </div>
                 @if (!string.IsNullOrEmpty(loadMessage))
                 {
                     <div class="alert alert-@loadMessageType py-1 mt-2">@loadMessage</div>
@@ -39,139 +42,143 @@
         </div>
     }
 
-    <div class="row">
-        <div class="col-md-8">
-            <EditForm Model="@player" OnValidSubmit="HandleSubmit" FormName="registration">
-                <DataAnnotationsValidator />
-                <ValidationSummary />
+    @if (isNewRegistration || (!isNewRegistration && playerLoaded))
+    {
+        <div class="row">
+            <div class="col-md-8">
+                <EditForm Model="@player" OnValidSubmit="HandleSubmit" FormName="registration">
+                    <DataAnnotationsValidator />
+                    <ValidationSummary />
 
-                <div class="row g-2">
-                    <div class="col-md-6">
-                        <div class="form-floating mb-2">
-                            <InputText @bind-Value="player.InGameName" class="form-control" id="inGameName" />
-                            <label for="inGameName">In-Game Name</label>
+                    <div class="row g-2">
+                        <div class="col-md-6">
+                            <div class="form-floating mb-2">
+                                <InputText @bind-Value="player.InGameName" class="form-control" id="inGameName" />
+                                <label for="inGameName">In-Game Name</label>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-floating mb-2">
+                                <InputText @bind-Value="player.Alliance" class="form-control" id="alliance" maxlength="3" />
+                                <label for="alliance">Alliance (3 letters)</label>
+                            </div>
                         </div>
                     </div>
-                    <div class="col-md-6">
-                        <div class="form-floating mb-2">
-                            <InputText @bind-Value="player.Alliance" class="form-control" id="alliance" maxlength="3" />
-                            <label for="alliance">Alliance (3 letters)</label>
-                        </div>
-                    </div>
-                </div>
 
-                <div class="row g-2">
-                    <div class="col-md-6">
-                        <div class="form-floating mb-2">
-                            <InputSelect @bind-Value="player.TroopType" class="form-select" id="troopType">
-                                @foreach (var type in Enum.GetValues<TroopType>())
-                                {
-                                    <option value="@type">@type</option>
-                                }
-                            </InputSelect>
-                            <label for="troopType">Troop Type - Highest you have</label>
+                    <div class="row g-2">
+                        <div class="col-md-6">
+                            <div class="form-floating mb-2">
+                                <InputSelect @bind-Value="player.TroopType" class="form-select" id="troopType">
+                                    @foreach (var type in Enum.GetValues<TroopType>())
+                                    {
+                                        <option value="@type">@type</option>
+                                    }
+                                </InputSelect>
+                                <label for="troopType">Troop Type - Highest you have</label>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-floating mb-2">
+                                <InputSelect @bind-Value="player.TroopLevel" class="form-select" id="troopLevel">
+                                    <option value="7">T7</option>
+                                    <option value="8">T8</option>
+                                    <option value="9">T9</option>
+                                    <option value="10">T10</option>
+                                    <option value="11">T11</option>
+                                </InputSelect>
+                                <label for="troopLevel">Troop Level - Highest you have even if not full march</label>
+                            </div>
                         </div>
                     </div>
-                    <div class="col-md-6">
-                        <div class="form-floating mb-2">
-                            <InputSelect @bind-Value="player.TroopLevel" class="form-select" id="troopLevel">
-                                <option value="7">T7</option>
-                                <option value="8">T8</option>
-                                <option value="9">T9</option>
-                                <option value="10">T10</option>
-                                <option value="11">T11</option>
-                            </InputSelect>
-                            <label for="troopLevel">Troop Level - Highest you have even if not full march</label>
-                        </div>
-                    </div>
-                </div>
 
-                <div class="row g-2">
-                    <div class="col-md-6">
-                        <div class="form-floating mb-2">
-                            <InputNumber @bind-Value="player.TroopCapacity" class="form-control" id="troopCapacity" />
-                            <label for="troopCapacity">Troop Capacity</label>
+                    <div class="row g-2">
+                        <div class="col-md-6">
+                            <div class="form-floating mb-2">
+                                <InputNumber @bind-Value="player.TroopCapacity" class="form-control" id="troopCapacity" />
+                                <label for="troopCapacity">Troop Capacity</label>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-floating mb-2">
+                                <InputNumber @bind-Value="player.RallySize" class="form-control" id="rallySize" />
+                                <label for="rallySize">Rally Size - Only required if you want to captain</label>
+                            </div>
                         </div>
                     </div>
-                    <div class="col-md-6">
-                        <div class="form-floating mb-2">
-                            <InputNumber @bind-Value="player.RallySize" class="form-control" id="rallySize" />
-                            <label for="rallySize">Rally Size - Only required if you want to captain</label>
-                        </div>
-                    </div>
-                </div>
 
-                <div class="row g-2">
-                    <div class="col-md-6">
-                        <div class="form-floating mb-2">
-                            <InputNumber @bind-Value="player.MaxDenLevel" class="form-control" id="maxDenLevel" />
-                            <label for="maxDenLevel">Highest Den you have ever solo'd </label>
+                    <div class="row g-2">
+                        <div class="col-md-6">
+                            <div class="form-floating mb-2">
+                                <InputNumber @bind-Value="player.MaxDenLevel" class="form-control" id="maxDenLevel" />
+                                <label for="maxDenLevel">Highest Den you have ever solo'd </label>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-floating mb-2">
+                                <InputSelect @bind-Value="player.PreferredShift" class="form-select" id="preferredShift">
+                                    <option value="1">Shift 1 (First 4 hours)</option>
+                                    <option value="2">Shift 2 (Last 4 hours)</option>
+                                    <option value="3">Both Shifts</option>
+                                </InputSelect>
+                                <label for="preferredShift">Preferred Shift</label>
+                            </div>
                         </div>
                     </div>
-                    <div class="col-md-6">
-                        <div class="form-floating mb-2">
-                            <InputSelect @bind-Value="player.PreferredShift" class="form-select" id="preferredShift">
-                                <option value="1">Shift 1 (First 4 hours)</option>
-                                <option value="2">Shift 2 (Last 4 hours)</option>
-                                <option value="3">Both Shifts</option>
-                            </InputSelect>
-                            <label for="preferredShift">Preferred Shift</label>
+
+                    <div class="row g-2 mt-2">
+                        <div class="col-md-6">
+                            <div class="form-check">
+                                <InputCheckbox @bind-Value="player.IsAvailableExtendedHours" class="form-check-input" id="extendedHours" />
+                                <label class="form-check-label" for="extendedHours">
+                                    Available for Extended Hours
+                                </label>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-check">
+                                <InputCheckbox @bind-Value="player.IsWillingToCaptain" class="form-check-input" id="captain" />
+                                <label class="form-check-label" for="captain">
+                                    Willing to be Captain
+                                </label>
+                            </div>
                         </div>
                     </div>
-                </div>
 
-                <div class="row g-2 mt-2">
-                    <div class="col-md-6">
-                        <div class="form-check">
-                            <InputCheckbox @bind-Value="player.IsAvailableExtendedHours" class="form-check-input" id="extendedHours" />
-                            <label class="form-check-label" for="extendedHours">
-                                Available for Extended Hours
-                            </label>
+                    @if (!string.IsNullOrEmpty(message))
+                    {
+                        <div class="alert alert-@messageType py-2 mt-3" role="alert">
+                            @message
                         </div>
-                    </div>
-                    <div class="col-md-6">
-                        <div class="form-check">
-                            <InputCheckbox @bind-Value="player.IsWillingToCaptain" class="form-check-input" id="captain" />
-                            <label class="form-check-label" for="captain">
-                                Willing to be Captain
-                            </label>
-                        </div>
-                    </div>
-                </div>
+                    }
 
-                @if (!string.IsNullOrEmpty(message))
-                {
-                    <div class="alert alert-@messageType py-2 mt-3" role="alert">
-                        @message
+                    <div class="mt-3">
+                        <button type="submit" class="btn btn-primary">
+                            @(isNewRegistration ? "Register" : "Update")
+                        </button>
                     </div>
-                }
-
-                <div class="mt-3">
-                    <button type="submit" class="btn btn-primary">
-                        @(isNewRegistration ? "Register" : "Update")
-                    </button>
-                </div>
-            </EditForm>
-        </div>
-
-        @if (!string.IsNullOrEmpty(accessCode))
-        {
-            <div class="col-md-4">
-                <div class="alert alert-success">
-                    <h5>Registration Successful!</h5>
-                    <p class="mb-0">
-                        Your access code is: <strong>@accessCode</strong>
-                        <br />
-                        Please save this code - you'll need it to update your information later.
-                    </p>
-                </div>
+                </EditForm>
             </div>
-        }
-    </div>
+
+            @if (!string.IsNullOrEmpty(accessCode))
+            {
+                <div class="col-md-4">
+                    <div class="alert alert-success">
+                        <h5>Registration Successful!</h5>
+                        <p class="mb-0">
+                            Your access code is: <strong>@accessCode</strong>
+                            <br />
+                            Please save this code - you'll need it to update your information later.
+                        </p>
+                    </div>
+                </div>
+            }
+        </div>
+    }
 </div>
 
 @code {
     private bool isNewRegistration = false;
+    private bool playerLoaded = false;
     private Player player = new();
     private string message = "";
     private string messageType = "";
@@ -182,7 +189,7 @@
 
     protected override void OnInitialized()
     {
-        // Set default values
+        // Set default values but don't show form initially
         player = new Player
             {
                 TroopLevel = 7,
@@ -190,12 +197,15 @@
             };
     }
 
+
     private void SwitchMode(bool newRegistration)
     {
         isNewRegistration = newRegistration;
-        // Reset messages and form when switching modes
+        // Reset states when switching modes
         message = "";
         loadMessage = "";
+        playerLoaded = false;
+        accessCodeInput = "";
         if (newRegistration)
         {
             player = new Player
@@ -206,8 +216,11 @@
         }
     }
 
+
+
     private async Task LoadExistingPlayer()
     {
+        playerLoaded = false;
         if (string.IsNullOrWhiteSpace(accessCodeInput))
         {
             loadMessage = "Please enter an access code";
@@ -226,6 +239,7 @@
         }
 
         player = existingPlayer;
+        playerLoaded = true;
         loadMessage = "Player details loaded successfully";
         loadMessageType = "success";
     }
