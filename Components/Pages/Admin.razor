@@ -276,17 +276,62 @@ else
             .Select(name => new BuildingAssignment { Name = name })
             .ToList();
 
+        var backupCaptains = new Dictionary<int, List<Player>>();
+        var assignedCaptains = new HashSet<int>();
+
         foreach (int shift in new[] { 1, 2 })
         {
             var shiftPlayers = allPlayers.Where(p =>
                 p.PreferredShift == shift ||
                 p.PreferredShift == 3 ||
-                p.PreferredShift == 4).ToList();
+                p.PreferredShift == 4
+            ).ToList();
 
             AssignShift(buildings, shiftPlayers, shift);
+
+            // Collect assigned captains
+            foreach (var building in buildings)
+            {
+                if (building.Shifts.ContainsKey(shift) && building.Shifts[shift].Captain != null)
+                {
+                    assignedCaptains.Add(building.Shifts[shift].Captain.Id);
+                }
+            }
+
+            // Get backup captains excluding those already assigned
+            backupCaptains[shift] = GetBackupCaptains(shiftPlayers, assignedCaptains);
         }
 
+        var backupSection = FormatBackupCaptains(backupCaptains);
+        buildings[0].BackupCaptainsText = backupSection;
+
         return buildings;
+    }
+
+    private List<Player> GetBackupCaptains(List<Player> shiftPlayers, HashSet<int> assignedCaptains)
+    {
+        return shiftPlayers
+            .Where(p => p.IsWillingToCaptain && !assignedCaptains.Contains(p.Id))
+            .OrderByDescending(p => p.MaxDenLevel)
+            .ThenByDescending(p => p.RallySize)
+            .Take(10)
+            .ToList();
+    }
+
+    private string FormatBackupCaptains(Dictionary<int, List<Player>> backupCaptains)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("\n=== Backup Captains ===");
+
+        foreach (var shift in backupCaptains.OrderBy(x => x.Key))
+        {
+            sb.AppendLine($"\nShift {shift.Key} Backup Captains:");
+            foreach (var captain in shift.Value)
+            {
+                sb.AppendLine($"  {captain.InGameName} [{captain.Alliance}] - {captain.TroopType}, Den {captain.MaxDenLevel}, Rally {captain.RallySize:N0}");
+            }
+        }
+        return sb.ToString();
     }
 
     private void AssignShift(List<BuildingAssignment> buildings, List<Player> players, int shift)
@@ -611,6 +656,7 @@ else
         public string Name { get; set; } = "";
         public bool IsHall => Name == "Hall";
         public Dictionary<int, RallyTeam> Shifts { get; set; } = new();
+        public string BackupCaptainsText { get; set; } = "";
     }
 
     public class RallyTeam
@@ -627,6 +673,7 @@ else
         public static string FormatAssignments(List<BuildingAssignment> assignments)
         {
             var sb = new StringBuilder();
+            var backupCaptainsText = "";
 
             foreach (var building in assignments)
             {
@@ -638,10 +685,21 @@ else
                     sb.AppendLine();
                 }
 
+                if (building.IsHall)
+                {
+                    backupCaptainsText = building.BackupCaptainsText;
+                }
+
                 if (building != assignments.Last())
                 {
                     sb.AppendLine();
                 }
+            }
+
+            // Add backup captains section at the end
+            if (!string.IsNullOrEmpty(backupCaptainsText))
+            {
+                sb.Append(backupCaptainsText);
             }
 
             return sb.ToString();
