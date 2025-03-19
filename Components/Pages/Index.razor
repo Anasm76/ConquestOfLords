@@ -2,6 +2,7 @@
 @using Microsoft.EntityFrameworkCore
 @page "/"
 @inject ConquestOfLords.Data.AppDbContext Db
+@inject IJSRuntime JSRuntime
 @rendermode InteractiveServer
 
 <PageTitle>CoL Event Registration</PageTitle>
@@ -80,8 +81,6 @@
                         <div class="col-md-6">
                             <div class="form-floating mb-2">
                                 <InputSelect @bind-Value="player.TroopLevel" class="form-select" id="troopLevel">
-                                    <option value="7">T7</option>
-                                    <option value="8">T8</option>
                                     <option value="9">T9</option>
                                     <option value="10">T10</option>
                                     <option value="11">T11</option>
@@ -174,7 +173,143 @@
             }
         </div>
     }
+
+    @* Leader Section - Only visible when the logged-in player is a leader *@
+    @if (playerLoaded && player.IsLeader)
+    {
+        <div class="row mt-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                        <h4 class="mb-0">Alliance Members - @player.Alliance</h4>
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="showActiveOnly" @bind="showActivePlayersOnly" />
+                            <label class="form-check-label text-white" for="showActiveOnly">Show active players only</label>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="alert alert-info mb-3">
+                            <strong>Note:</strong> You can toggle player participation by clicking the checkbox in the Active column.
+                        </div>
+
+                        @if (allianceMembers.Any())
+                        {
+                            <div class="table-responsive">
+                                <table class="table table-striped table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th class="sortable" @onclick="() => SortBy(nameof(Player.InGameName))">
+                                                <div class="d-flex align-items-center">
+                                                    In-Game Name
+                                                    <span class="sort-indicator">@(GetSortIndicator(nameof(Player.InGameName)))</span>
+                                                </div>
+                                            </th>
+                                            <th class="sortable" @onclick="() => SortBy(nameof(Player.TroopType))">
+                                                <div class="d-flex align-items-center">
+                                                    Troop Type
+                                                    <span class="sort-indicator">@(GetSortIndicator(nameof(Player.TroopType)))</span>
+                                                </div>
+                                            </th>
+                                            <th class="sortable" @onclick="() => SortBy(nameof(Player.TroopLevel))">
+                                                <div class="d-flex align-items-center">
+                                                    Level
+                                                    <span class="sort-indicator">@(GetSortIndicator(nameof(Player.TroopLevel)))</span>
+                                                </div>
+                                            </th>
+                                            <th class="sortable" @onclick="() => SortBy(nameof(Player.TroopCapacity))">
+                                                <div class="d-flex align-items-center">
+                                                    Capacity
+                                                    <span class="sort-indicator">@(GetSortIndicator(nameof(Player.TroopCapacity)))</span>
+                                                </div>
+                                            </th>
+                                            <th class="sortable" @onclick="() => SortBy(nameof(Player.RallySize))">
+                                                <div class="d-flex align-items-center">
+                                                    Rally Size
+                                                    <span class="sort-indicator">@(GetSortIndicator(nameof(Player.RallySize)))</span>
+                                                </div>
+                                            </th>
+                                            <th class="sortable" @onclick="() => SortBy(nameof(Player.PreferredShift))">
+                                                <div class="d-flex align-items-center">
+                                                    Shift
+                                                    <span class="sort-indicator">@(GetSortIndicator(nameof(Player.PreferredShift)))</span>
+                                                </div>
+                                            </th>
+                                            <th>Extended</th>
+                                            <th>Captain</th>
+                                            <th class="sortable" @onclick="() => SortBy(nameof(Player.IsParticipating))">
+                                                <div class="d-flex align-items-center">
+                                                    Active
+                                                    <span class="sort-indicator">@(GetSortIndicator(nameof(Player.IsParticipating)))</span>
+                                                </div>
+                                            </th>
+                                            <th>Access Code</th>
+                                            <th class="sortable" @onclick="() => SortBy(nameof(Player.LastUpdated))">
+                                                <div class="d-flex align-items-center">
+                                                    Last Updated
+                                                    <span class="sort-indicator">@(GetSortIndicator(nameof(Player.LastUpdated)))</span>
+                                                </div>
+                                            </th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var member in FilterAndSortPlayers(allianceMembers))
+                                        {
+                                            <tr>
+                                                <td>@member.InGameName</td>
+                                                <td>@member.TroopType</td>
+                                                <td>T@(member.TroopLevel)</td>
+                                                <td>@member.TroopCapacity.ToString("N0")</td>
+                                                <td>@member.RallySize.ToString("N0")</td>
+                                                <td>@member.PreferredShift</td>
+                                                <td>@(member.IsAvailableExtendedHours ? "Yes" : "No")</td>
+                                                <td>@(member.IsWillingToCaptain ? "Yes" : "No")</td>
+                                                <td>
+                                                    <div class="form-check">
+                                                        <input type="checkbox" class="form-check-input"
+                                                               checked="@member.IsParticipating"
+                                                               @onchange="async (e) => await ToggleParticipation(member, e.Value)" />
+                                                    </div>
+                                                </td>
+                                                <td>
+                                                    <span class="text-primary" role="button" style="cursor: pointer" @onclick="() => CopyInviteCode(member.AccessCode)">
+                                                        @member.AccessCode
+                                                    </span>
+                                                </td>
+                                                <td>@member.LastUpdated.ToString("g")</td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="alert alert-info">
+                                No alliance members found. As players from your alliance register, they will appear here.
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
 </div>
+
+<style>
+    .sortable {
+        cursor: pointer;
+        user-select: none;
+    }
+
+        .sortable:hover {
+            background-color: rgba(0,0,0,0.05);
+        }
+
+    .sort-indicator {
+        display: inline-block;
+        margin-left: 0.25rem;
+    }
+</style>
 
 @code {
     private bool isNewRegistration = false;
@@ -186,6 +321,10 @@
     private string accessCodeInput = "";
     private string loadMessage = "";
     private string loadMessageType = "";
+    private List<Player> allianceMembers = new();
+    private string currentSortColumn = "LastUpdated";
+    private bool isAscending = false;
+    private bool showActivePlayersOnly = true; // Default to showing only active players
 
     protected override void OnInitialized()
     {
@@ -196,7 +335,6 @@
                 PreferredShift = 1
             };
     }
-
 
     private void SwitchMode(bool newRegistration)
     {
@@ -216,11 +354,11 @@
         }
     }
 
-
-
     private async Task LoadExistingPlayer()
     {
         playerLoaded = false;
+        allianceMembers.Clear();
+
         if (string.IsNullOrWhiteSpace(accessCodeInput))
         {
             loadMessage = "Please enter an access code";
@@ -242,6 +380,23 @@
         playerLoaded = true;
         loadMessage = "Player details loaded successfully";
         loadMessageType = "success";
+
+        // If the player is a leader, load alliance members
+        if (player.IsLeader)
+        {
+            await LoadAllianceMembers();
+        }
+    }
+
+    private async Task LoadAllianceMembers()
+    {
+        if (string.IsNullOrEmpty(player.Alliance))
+            return;
+
+        allianceMembers = await Db.Players
+            .Where(p => p.Alliance == player.Alliance)
+            .OrderByDescending(p => p.LastUpdated)
+            .ToListAsync();
     }
 
     private async Task HandleSubmit()
@@ -292,6 +447,12 @@
                 // For updates, just update the LastUpdated timestamp
                 player.LastUpdated = DateTime.UtcNow;
                 Db.Players.Update(player);
+
+                // If player is a leader, refresh alliance members
+                if (player.IsLeader)
+                {
+                    await LoadAllianceMembers();
+                }
             }
 
             await Db.SaveChangesAsync();
@@ -325,5 +486,98 @@
         const string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
         return new string(Enumerable.Repeat(chars, 6)
             .Select(s => s[Random.Shared.Next(s.Length)]).ToArray());
+    }
+
+    // Sorting functionality for alliance member table
+    private string GetSortIndicator(string column)
+    {
+        if (currentSortColumn != column) return "";
+        return isAscending ? "↑" : "↓";
+    }
+
+    private void SortBy(string column)
+    {
+        if (currentSortColumn == column)
+        {
+            isAscending = !isAscending;
+        }
+        else
+        {
+            currentSortColumn = column;
+            isAscending = true;
+        }
+        StateHasChanged();
+    }
+
+    private IEnumerable<Player> FilterAndSortPlayers(IEnumerable<Player> players)
+    {
+        // First apply the active filter if needed
+        var filteredPlayers = showActivePlayersOnly
+            ? players.Where(p => p.IsParticipating).ToList()
+            : players.ToList();
+
+        // Then apply sorting
+        return SortPlayers(filteredPlayers);
+    }
+
+    private IOrderedEnumerable<Player> SortPlayers(IEnumerable<Player> players)
+    {
+        return currentSortColumn switch
+        {
+            "InGameName" => isAscending
+                ? players.OrderBy(p => p.InGameName)
+                : players.OrderByDescending(p => p.InGameName),
+            "TroopType" => isAscending
+                ? players.OrderBy(p => p.TroopType)
+                : players.OrderByDescending(p => p.TroopType),
+            "TroopLevel" => isAscending
+                ? players.OrderBy(p => p.TroopLevel)
+                : players.OrderByDescending(p => p.TroopLevel),
+            "TroopCapacity" => isAscending
+                ? players.OrderBy(p => p.TroopCapacity)
+                : players.OrderByDescending(p => p.TroopCapacity),
+            "RallySize" => isAscending
+                ? players.OrderBy(p => p.RallySize)
+                : players.OrderByDescending(p => p.RallySize),
+            "PreferredShift" => isAscending
+                ? players.OrderBy(p => p.PreferredShift)
+                : players.OrderByDescending(p => p.PreferredShift),
+            "IsParticipating" => isAscending
+                ? players.OrderBy(p => p.IsParticipating)
+                : players.OrderByDescending(p => p.IsParticipating),
+            "LastUpdated" => isAscending
+                ? players.OrderBy(p => p.LastUpdated)
+                : players.OrderByDescending(p => p.LastUpdated),
+            _ => players.OrderByDescending(p => p.LastUpdated)
+        };
+    }
+
+    private async Task ToggleParticipation(Player memberPlayer, object? isChecked)
+    {
+        if (isChecked is bool isParticipating)
+        {
+            // Find the player in the database and update
+            var dbPlayer = await Db.Players.FindAsync(memberPlayer.Id);
+            if (dbPlayer != null)
+            {
+                dbPlayer.IsParticipating = isParticipating;
+                dbPlayer.LastUpdated = DateTime.UtcNow;
+                await Db.SaveChangesAsync();
+
+                // Update the local list
+                var index = allianceMembers.FindIndex(p => p.Id == memberPlayer.Id);
+                if (index >= 0)
+                {
+                    allianceMembers[index].IsParticipating = isParticipating;
+                    allianceMembers[index].LastUpdated = DateTime.UtcNow;
+                }
+            }
+        }
+    }
+
+    private async Task CopyInviteCode(string accessCode)
+    {
+        var text = $"Your code for CoL is {accessCode} and the URL is https://rb.gy/kdbdyg";
+        await JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", text);
     }
 }

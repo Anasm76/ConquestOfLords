@@ -15,4 +15,5 @@ public class Player
     public string AccessCode { get; set; } = "";
     public bool IsParticipating { get; set; } = true;
     public DateTime LastUpdated { get; set; } = DateTime.UtcNow;
+    public bool IsLeader { get; set; } = false;
 }
