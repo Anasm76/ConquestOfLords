@@ -80,7 +80,6 @@ else
         <div class="row mb-4">
             <div class="col">
                 <div class="btn-group">
-
                     <button class="btn btn-primary" @onclick="GenerateTeams">
                         Generate Teams
                     </button>
@@ -90,6 +89,9 @@ else
                             Save Assignments
                         </button>
                     }
+                    <button class="btn btn-danger" @onclick="ResetAllParticipation">
+                        Reset Participation
+                    </button>
                 </div>
             </div>
         </div>
@@ -550,16 +552,45 @@ else
 
     private async Task ResetAllParticipation()
     {
-        if (!await ShowConfirmation("Are you sure you want to reset all participation flags?"))
+        if (!await ShowConfirmation("Are you sure you want to reset all participation flags and clear assignments? This action cannot be undone."))
             return;
 
+        // Reset all player participation flags
         foreach (var player in players)
         {
             player.IsParticipating = false;
             player.LastUpdated = DateTime.UtcNow;
         }
 
+        // Create a new "No assignments yet" record and deactivate current assignments
+        var currentAssignments = await Db.TeamAssignments.Where(ta => ta.IsActive).ToListAsync();
+        foreach (var assignment in currentAssignments)
+        {
+            assignment.IsActive = false;
+        }
+
+        // Create new empty assignment
+        var newAssignment = new TeamAssignment
+            {
+                AssignmentText = "No assignments yet",
+                IsActive = true
+            };
+
+        Db.TeamAssignments.Add(newAssignment);
+
+        // Save all changes
         await Db.SaveChangesAsync();
+
+        // Update UI state
+        generatedAssignments = "No assignments yet";
+        currentAssignment = newAssignment;
+
+        // Refresh player list
+        await RefreshPlayers();
+
+        saveMessage = "Participation reset successfully!";
+        saveMessageType = "success";
+        StateHasChanged();
     }
 
     private async Task DeletePlayer(Player player)
