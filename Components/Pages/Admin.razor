@@ -76,7 +76,22 @@ else
 {
     <div class="container-fluid mt-4">
         <h2>Event Administration</h2>
-
+        <div class="row mb-4">
+            <div class="col">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">Alliance Participation Summary</h5>
+                        <button class="btn btn-sm btn-outline-secondary"
+                                @onclick="@(() => JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", allianceSummary))">
+                            <i class="bi bi-clipboard"></i> Copy
+                        </button>
+                    </div>
+                    <div class="card-body">
+                        <pre class="mb-0">@allianceSummary</pre>
+                    </div>
+                </div>
+            </div>
+        </div>
         <div class="row mb-4">
             <div class="col">
                 <div class="btn-group">
@@ -256,6 +271,7 @@ else
             players = await Db.Players
                 .OrderByDescending(p => p.LastUpdated)
                 .ToListAsync();
+            GenerateAllianceSummary();
         }
     }
     private async Task LoadCurrentAssignment()
@@ -269,6 +285,34 @@ else
         {
             generatedAssignments = currentAssignment.AssignmentText;
         }
+    }
+    private string allianceSummary = "";
+
+    private void GenerateAllianceSummary()
+    {
+        var participatingPlayers = players.Where(p => p.IsParticipating).ToList();
+
+        var allianceGroups = participatingPlayers
+            .GroupBy(p => p.Alliance)
+            .Select(g => new
+            {
+                Alliance = g.Key,
+                Count = g.Count()
+            })
+            .OrderByDescending(g => g.Count)
+            .ToList();
+
+        var sb = new StringBuilder();
+        sb.AppendLine($"Total Participating Players: {participatingPlayers.Count}");
+        sb.AppendLine();
+        sb.AppendLine("Alliance Breakdown:");
+
+        foreach (var alliance in allianceGroups)
+        {
+            sb.AppendLine($"{alliance.Alliance}: {alliance.Count}");
+        }
+
+        allianceSummary = sb.ToString();
     }
     private List<BuildingAssignment> GenerateAssignments(List<Player> allPlayers)
     {
@@ -547,6 +591,7 @@ else
             player.IsParticipating = isParticipating;
             player.LastUpdated = DateTime.UtcNow;
             await Db.SaveChangesAsync();
+            GenerateAllianceSummary();
         }
     }
 
