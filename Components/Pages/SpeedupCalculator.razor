@@ -1,0 +1,178 @@
+﻿@page "/speedup-calculator"
+@rendermode InteractiveServer
+
+<PageTitle>Game Speedup Calculator</PageTitle>
+
+<div class="container mt-3">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="card shadow">
+                <div class="card-header bg-primary text-white">
+                    <h3 class="mb-0">Game Speedup Calculator</h3>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-info mb-4">
+                        <h5 class="alert-heading mb-2">How to Use</h5>
+                        <p class="mb-2">Enter the number of speedup items you have for each duration. The calculator will automatically show you the total time in minutes, hours, and days.</p>
+                        <p class="mb-0"><strong>Perfect for:</strong> Planning upgrades, comparing speedup values, or deciding which speedups to use for specific timers.</p>
+                    </div>
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <div class="form-floating">
+                                <input type="number" class="form-control" id="min1" value="@min1" @oninput="@(e => UpdateValue(ref min1, e))" min="0" />
+                                <label for="min1">1 minute speedups</label>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="form-floating">
+                                <input type="number" class="form-control" id="min5" value="@min5" @oninput="@(e => UpdateValue(ref min5, e))" min="0" />
+                                <label for="min5">5 minute speedups</label>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="form-floating">
+                                <input type="number" class="form-control" id="min10" value="@min10" @oninput="@(e => UpdateValue(ref min10, e))" min="0" />
+                                <label for="min10">10 minute speedups</label>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="form-floating">
+                                <input type="number" class="form-control" id="min15" value="@min15" @oninput="@(e => UpdateValue(ref min15, e))" min="0" />
+                                <label for="min15">15 minute speedups</label>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="form-floating">
+                                <input type="number" class="form-control" id="min30" value="@min30" @oninput="@(e => UpdateValue(ref min30, e))" min="0" />
+                                <label for="min30">30 minute speedups</label>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="form-floating">
+                                <input type="number" class="form-control" id="min60" value="@min60" @oninput="@(e => UpdateValue(ref min60, e))" min="0" />
+                                <label for="min60">60 minute speedups</label>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="form-floating">
+                                <input type="number" class="form-control" id="hour3" value="@hour3" @oninput="@(e => UpdateValue(ref hour3, e))" min="0" />
+                                <label for="hour3">3 hour speedups</label>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="form-floating">
+                                <input type="number" class="form-control" id="hour8" value="@hour8" @oninput="@(e => UpdateValue(ref hour8, e))" min="0" />
+                                <label for="hour8">8 hour speedups</label>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="form-floating">
+                                <input type="number" class="form-control" id="hour15" value="@hour15" @oninput="@(e => UpdateValue(ref hour15, e))" min="0" />
+                                <label for="hour15">15 hour speedups</label>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="form-floating">
+                                <input type="number" class="form-control" id="hour24" value="@hour24" @oninput="@(e => UpdateValue(ref hour24, e))" min="0" />
+                                <label for="hour24">24 hour speedups</label>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="form-floating">
+                                <input type="number" class="form-control" id="day7" value="@day7" @oninput="@(e => UpdateValue(ref day7, e))" min="0" />
+                                <label for="day7">7 day speedups</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mt-4">
+                        <button class="btn btn-danger w-100" @onclick="ResetAll">
+                            Reset All
+                        </button>
+                    </div>
+
+                    <div class="mt-4 p-3 bg-light rounded border-start border-primary border-4">
+                        <div class="row">
+                            <div class="col-md-4 mb-2">
+                                <strong class="text-muted">Total Minutes:</strong>
+                                <div class="h5 mb-0">@totalMinutes.ToString("N0")</div>
+                            </div>
+                            <div class="col-md-4 mb-2">
+                                <strong class="text-muted">Total Hours:</strong>
+                                <div class="h5 mb-0">@totalHours.ToString("F1")</div>
+                            </div>
+                            <div class="col-md-4 mb-2">
+                                <strong class="text-muted">Total Days:</strong>
+                                <div class="h5 mb-0">@days days @remainingHours hours</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private int min1 = 0;
+    private int min5 = 0;
+    private int min10 = 0;
+    private int min15 = 0;
+    private int min30 = 0;
+    private int min60 = 0;
+    private int hour3 = 0;
+    private int hour8 = 0;
+    private int hour15 = 0;
+    private int hour24 = 0;
+    private int day7 = 0;
+
+    private int totalMinutes = 0;
+    private double totalHours = 0;
+    private int days = 0;
+    private int remainingHours = 0;
+
+    protected override void OnInitialized()
+    {
+        Calculate();
+    }
+
+    private void UpdateValue(ref int field, ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out int value) && value >= 0)
+        {
+            field = value;
+        }
+        else
+        {
+            field = 0;
+        }
+        Calculate();
+    }
+
+    private void Calculate()
+    {
+        totalMinutes = min1 * 1 + min5 * 5 + min10 * 10 + min15 * 15 + min30 * 30 + min60 * 60 +
+                      hour3 * 180 + hour8 * 480 + hour15 * 900 + hour24 * 1440 + day7 * 10080;
+
+        totalHours = totalMinutes / 60.0;
+        days = (int)Math.Floor(totalHours / 24);
+        remainingHours = (int)Math.Floor(totalHours % 24);
+    }
+
+    private void ResetAll()
+    {
+        min1 = min5 = min10 = min15 = min30 = min60 = 0;
+        hour3 = hour8 = hour15 = hour24 = day7 = 0;
+        Calculate();
+    }
+}
