@@ -94,19 +94,94 @@ else
         </div>
         <div class="row mb-4">
             <div class="col">
-                <div class="btn-group">
-                    <button class="btn btn-primary" @onclick="GenerateTeams">
-                        Generate Teams
-                    </button>
-                    @if (!string.IsNullOrEmpty(generatedAssignments))
-                    {
-                        <button class="btn btn-success" @onclick="SaveAssignments">
-                            Save Assignments
-                        </button>
-                    }
-                    <button class="btn btn-danger" @onclick="ResetAllParticipation">
-                        Reset Participation
-                    </button>
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">Team Generation Settings</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row mb-3">
+                            <div class="col-md-2">
+                                <label class="form-label">Cavalry Teams</label>
+                                <select class="form-select" @bind="cavalryTeams" @bind:after="ValidateTeamComposition">
+                                    @for (int i = 0; i <= GetMaxTeamCount(TroopType.Cavalry); i++)
+                                    {
+                                        <option value="@i">@i</option>
+                                    }
+                                </select>
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label">Infantry Teams</label>
+                                <select class="form-select" @bind="infantryTeams" @bind:after="ValidateTeamComposition">
+                                    @for (int i = 0; i <= GetMaxTeamCount(TroopType.Infantry); i++)
+                                    {
+                                        <option value="@i">@i</option>
+                                    }
+                                </select>
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label">Archer Teams</label>
+                                <select class="form-select" @bind="archerTeams" @bind:after="ValidateTeamComposition">
+                                    @for (int i = 0; i <= GetMaxTeamCount(TroopType.Archer); i++)
+                                    {
+                                        <option value="@i">@i</option>
+                                    }
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">Hall Assignment</label>
+                                <div>
+                                    <div class="form-check form-check-inline">
+                                        <input class="form-check-input" type="radio" name="hallType" id="hallCavalry" 
+                                               checked="@(hallTroopType == TroopType.Cavalry)"
+                                               @onchange="@(() => hallTroopType = TroopType.Cavalry)" />
+                                        <label class="form-check-label" for="hallCavalry">Cavalry</label>
+                                    </div>
+                                    <div class="form-check form-check-inline">
+                                        <input class="form-check-input" type="radio" name="hallType" id="hallInfantry"
+                                               checked="@(hallTroopType == TroopType.Infantry)"
+                                               @onchange="@(() => hallTroopType = TroopType.Infantry)" />
+                                        <label class="form-check-label" for="hallInfantry">Infantry</label>
+                                    </div>
+                                    <div class="form-check form-check-inline">
+                                        <input class="form-check-input" type="radio" name="hallType" id="hallArcher"
+                                               checked="@(hallTroopType == TroopType.Archer)"
+                                               @onchange="@(() => hallTroopType = TroopType.Archer)" />
+                                        <label class="form-check-label" for="hallArcher">Archer</label>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">Total Teams: @(cavalryTeams + infantryTeams + archerTeams)</label>
+                                @if (!string.IsNullOrEmpty(teamCompositionWarning))
+                                {
+                                    <div class="alert alert-warning py-1 px-2 small">
+                                        @teamCompositionWarning
+                                    </div>
+                                }
+                                @if (cavalryTeams + infantryTeams + archerTeams == 5)
+                                {
+                                    <div class="alert alert-success py-1 px-2 small">
+                                        ✓ Team composition valid
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                        <div class="btn-group">
+                            <button class="btn btn-primary" @onclick="GenerateTeams" 
+                                    disabled="@(cavalryTeams + infantryTeams + archerTeams != 5)">
+                                Generate Teams
+                            </button>
+                            @if (!string.IsNullOrEmpty(generatedAssignments))
+                            {
+                                <button class="btn btn-success" @onclick="SaveAssignments">
+                                    Save Assignments
+                                </button>
+                            }
+                            <button class="btn btn-danger" @onclick="ResetAllParticipation">
+                                Reset Participation
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -254,6 +329,13 @@ else
     private TaskCompletionSource<bool>? confirmationTcs;
     private HashSet<int> shift1Captains = new();
     private HashSet<int> shift2Captains = new();
+    
+    // Team composition variables
+    private int cavalryTeams = 1;
+    private int infantryTeams = 1;
+    private int archerTeams = 3;
+    private TroopType hallTroopType = TroopType.Archer;
+    private string teamCompositionWarning = "";
 
     protected override async Task OnInitializedAsync()
     {
@@ -383,35 +465,50 @@ else
     private void AssignShift(List<BuildingAssignment> buildings, List<Player> players, int shift)
     {
         var captainSet = shift == 1 ? shift1Captains : shift2Captains;
-        // Select captains
+        // Select captains based on team composition
         var potentialCaptains = players.Where(p => p.IsWillingToCaptain)
             .OrderByDescending(p => p.MaxDenLevel)
             .ThenByDescending(p => p.RallySize)
             .ToList();
 
-        var cavalryCaptain = potentialCaptains.First(p => p.TroopType == TroopType.Cavalry);
-        var infantryCaptain = potentialCaptains.First(p => p.TroopType == TroopType.Infantry);
-        var archerCaptains = potentialCaptains.Where(p => p.TroopType == TroopType.Archer)
-            .Take(3).ToList();
+        var captainsByType = new Dictionary<TroopType, List<Player>>();
+        captainsByType[TroopType.Cavalry] = potentialCaptains.Where(p => p.TroopType == TroopType.Cavalry).Take(cavalryTeams).ToList();
+        captainsByType[TroopType.Infantry] = potentialCaptains.Where(p => p.TroopType == TroopType.Infantry).Take(infantryTeams).ToList();
+        captainsByType[TroopType.Archer] = potentialCaptains.Where(p => p.TroopType == TroopType.Archer).Take(archerTeams).ToList();
 
-        var allCaptains = new List<Player> { cavalryCaptain, infantryCaptain }
-            .Concat(archerCaptains).ToList();
+        // Ensure we have enough captains for the specified composition
+        if (captainsByType[TroopType.Cavalry].Count < cavalryTeams ||
+            captainsByType[TroopType.Infantry].Count < infantryTeams ||
+            captainsByType[TroopType.Archer].Count < archerTeams)
+        {
+            throw new InvalidOperationException("Not enough captains available for the specified team composition");
+        }
 
-        // Assign best captain to Hall
-        var bestCaptain = allCaptains.First();
-        buildings[0].Shifts[shift] = new RallyTeam { Captain = bestCaptain };
-        allCaptains.RemoveAt(0);
-        captainSet.Add(bestCaptain.Id);
+        // Combine all selected captains and sort by quality
+        var allCaptains = captainsByType.Values.SelectMany(x => x)
+            .OrderByDescending(p => p.MaxDenLevel)
+            .ThenByDescending(p => p.RallySize)
+            .ToList();
+
+        // Assign captain of specified type to Hall
+        var hallCaptain = allCaptains.FirstOrDefault(c => c.TroopType == hallTroopType);
+        if (hallCaptain == null)
+        {
+            // Fallback to best captain if specified type not available
+            hallCaptain = allCaptains.First();
+        }
+        
+        buildings[0].Shifts[shift] = new RallyTeam { Captain = hallCaptain };
+        allCaptains.Remove(hallCaptain);
+        captainSet.Add(hallCaptain.Id);
 
         // Assign remaining captains to spires
-        for (int i = 1; i < buildings.Count; i++)
+        for (int i = 1; i < buildings.Count && i - 1 < allCaptains.Count; i++)
         {
             buildings[i].Shifts[shift] = new RallyTeam { Captain = allCaptains[i - 1] };
+            captainSet.Add(allCaptains[i - 1].Id);
         }
-        foreach (var captain in allCaptains)
-        {
-            captainSet.Add(captain.Id);
-        }
+        
         // Remove captains from player pool
         var remainingPlayers = players.Where(p => !captainSet.Contains(p.Id)).ToList();
 
@@ -725,6 +822,51 @@ else
     {
         var text = $"Your code for CoL is {accessCode} and the URL is https://rb.gy/kdbdyg";
         await JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", text);
+    }
+
+    private int GetMaxTeamCount(TroopType troopType)
+    {
+        int currentTotal = cavalryTeams + infantryTeams + archerTeams;
+        int currentValue = troopType switch
+        {
+            TroopType.Cavalry => cavalryTeams,
+            TroopType.Infantry => infantryTeams,
+            TroopType.Archer => archerTeams,
+            _ => 0
+        };
+        
+        // Maximum is 5 minus the sum of the other two types
+        int othersSum = currentTotal - currentValue;
+        return Math.Max(0, 5 - othersSum);
+    }
+
+    private void ValidateTeamComposition()
+    {
+        int total = cavalryTeams + infantryTeams + archerTeams;
+        if (total > 5)
+        {
+            teamCompositionWarning = "Total teams cannot exceed 5. Please adjust.";
+        }
+        else if (total < 5)
+        {
+            teamCompositionWarning = $"Need {5 - total} more team(s) to reach 5.";
+        }
+        else
+        {
+            teamCompositionWarning = "";
+            
+            // Validate Hall assignment is valid for selected composition
+            if ((hallTroopType == TroopType.Cavalry && cavalryTeams == 0) ||
+                (hallTroopType == TroopType.Infantry && infantryTeams == 0) ||
+                (hallTroopType == TroopType.Archer && archerTeams == 0))
+            {
+                // Auto-adjust Hall type to first available
+                if (cavalryTeams > 0) hallTroopType = TroopType.Cavalry;
+                else if (infantryTeams > 0) hallTroopType = TroopType.Infantry;
+                else if (archerTeams > 0) hallTroopType = TroopType.Archer;
+            }
+        }
+        StateHasChanged();
     }
     // Make these classes public so they can be accessed by AssignmentFormatter
     public class BuildingAssignment
